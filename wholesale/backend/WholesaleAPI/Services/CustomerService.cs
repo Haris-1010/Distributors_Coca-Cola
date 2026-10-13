@@ -24,21 +24,26 @@ public class CustomerService
 
     public async Task<List<CustomerDto>> ListAsync(string? search, bool includeInactive, string? filter)
     {
-        var q = _db.Customers.AsNoTracking().AsQueryable();
-        if (!includeInactive) q = q.Where(c => c.IsActive);
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var s = search.Trim();
-            q = q.Where(c => EF.Functions.ILike(c.Name, $"%{s}%") || (c.BusinessName != null && EF.Functions.ILike(c.BusinessName, $"%{s}%"))
-                             || (c.Phone != null && c.Phone.Contains(s)));
-        }
-        q = filter?.ToLowerInvariant() switch
-        {
-            "outstanding" => q.Where(c => c.OutstandingBalance > 0),
-            "crates" => q.Where(c => c.EmptyCrateBalance > 0),
-            _ => q,
-        };
+        var q = FilterCustomers(search, includeInactive, filter);
         return _mapper.Map<List<CustomerDto>>(await q.OrderBy(c => c.Name).ToListAsync());
+    }
+
+    public async Task<CustomerPageDto> ListPagedAsync(string? search, bool includeInactive, string? filter, int page, int pageSize)
+    {
+        var summaryQuery = _db.Customers.AsNoTracking().Where(c => includeInactive || c.IsActive);
+        var customerCount = await summaryQuery.CountAsync();
+        var totalDue = await summaryQuery.Where(c => c.OutstandingBalance > 0)
+            .SumAsync(c => (decimal?)c.OutstandingBalance) ?? 0;
+        var totalCrates = await summaryQuery.Where(c => c.EmptyCrateBalance > 0)
+            .SumAsync(c => (int?)c.EmptyCrateBalance) ?? 0;
+
+        var q = FilterCustomers(search, includeInactive, filter);
+        var total = await q.CountAsync();
+        var rows = await q.OrderBy(c => c.Name).ThenBy(c => c.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+        return new CustomerPageDto(
+            _mapper.Map<List<CustomerDto>>(rows), total, page, pageSize,
+            customerCount, totalDue, totalCrates);
     }
 
     public async Task<CustomerDto> GetAsync(Guid id) =>
@@ -169,4 +174,23 @@ public class CustomerService
         c.CustomerType = r.CustomerType;
         c.IsActive = r.IsActive;
     }
+
+    private IQueryable<Customer> FilterCustomers(string? search, bool includeInactive, string? filter)
+    {
+        var q = _db.Customers.AsNoTracking().AsQueryable();
+        if (!includeInactive) q = q.Where(c => c.IsActive);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim();
+            q = q.Where(c => EF.Functions.ILike(c.Name, $"%{s}%") || (c.BusinessName != null && EF.Functions.ILike(c.BusinessName, $"%{s}%"))
+                             || (c.Phone != null && c.Phone.Contains(s)));
+        }
+        return filter?.ToLowerInvariant() switch
+        {
+            "outstanding" => q.Where(c => c.OutstandingBalance > 0),
+            "crates" => q.Where(c => c.EmptyCrateBalance > 0),
+            _ => q,
+        };
+    }
+
 }

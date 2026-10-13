@@ -9,7 +9,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
-import { BRANDS, Product, UNIT_TYPES } from '../../core/models';
+import { Product, UNIT_TYPES } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { SettingsService } from '../../core/settings.service';
 import { round2 } from '../../core/util';
@@ -24,8 +24,8 @@ import { map } from 'rxjs';
     <mat-dialog-content>
       <form [formGroup]="form" id="productForm" (ngSubmit)="save()" class="form-grid">
         <mat-form-field class="span-2"><mat-label>Name</mat-label><input matInput formControlName="name" placeholder="e.g. Pepsi 250ml Glass"></mat-form-field>
-        <mat-form-field><mat-label>Brand</mat-label>
-          <mat-select formControlName="brand">@for (b of brands; track b.value) { <mat-option [value]="b.value">{{ b.label }}</mat-option> }</mat-select></mat-form-field>
+        <mat-form-field><mat-label>Brand</mat-label><input matInput formControlName="brand" maxlength="20" placeholder="e.g. Pepsi">
+          <mat-hint>Type a new brand name; it will appear in the POS filter after saving.</mat-hint></mat-form-field>
         <mat-form-field><mat-label>Category</mat-label><input matInput formControlName="category"></mat-form-field>
         <mat-form-field><mat-label>Unit type</mat-label>
           <mat-select formControlName="unitType">@for (u of units; track u) { <mat-option [value]="u">{{ u }}</mat-option> }</mat-select></mat-form-field>
@@ -74,7 +74,6 @@ export class ProductDialog {
   private settings = inject(SettingsService);
   auth = inject(AuthService);
   private fb = inject(FormBuilder);
-  brands = BRANDS;
   units = UNIT_TYPES;
   busy = signal(false);
   perCrate = this.settings.profitPerCrate;

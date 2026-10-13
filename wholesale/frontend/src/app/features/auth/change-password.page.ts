@@ -32,7 +32,7 @@ const strong = (c: AbstractControl): ValidationErrors | null => {
         <input matInput type="password" formControlName="next" autocomplete="new-password">
         <mat-hint>At least 8 characters with a capital, a small letter and a number.</mat-hint>
       </mat-form-field>
-      <mat-form-field class="full" style="margin-top:8px">
+      <mat-form-field class="full">
         <mat-label>Repeat new password</mat-label>
         <input matInput type="password" formControlName="repeat" autocomplete="new-password">
         @if (form.hasError('mismatch')) { <mat-error>Passwords don't match.</mat-error> }

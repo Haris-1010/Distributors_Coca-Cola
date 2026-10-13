@@ -10,13 +10,14 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../core/auth.service';
+import { ApiService } from '../../core/api.service';
 import { Brand, Customer, PAYMENT_MODES, PaymentMode, Product, Sale } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
 import { SettingsService } from '../../core/settings.service';
-import { cratesFor, round2, uuid } from '../../core/util';
+import { brandLabel, cratesFor, round2, uuid } from '../../core/util';
 import { ConnectivityService } from '../../offline/connectivity.service';
 import { DataService } from '../../offline/data.service';
 import { BrandPipe, CratesPipe, IntPipe, MoneyPipe } from '../../shared/pipes';
@@ -42,6 +43,8 @@ export class PosPage {
   private dialog = inject(MatDialog);
   private notify = inject(NotifyService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private api = inject(ApiService);
   auth = inject(AuthService);
   settings = inject(SettingsService);
   conn = inject(ConnectivityService);
@@ -55,6 +58,9 @@ export class PosPage {
   customers = signal<Customer[]>([]);
   loading = signal(true);
   saving = signal(false);
+  editMode = signal(false);
+  editingSaleId = '';
+  editStockCredit = signal(new Map<string, number>());
 
   search = signal('');
   brand = signal<Brand | 'All'>('All');
@@ -75,6 +81,8 @@ export class PosPage {
       (b === 'All' || p.brand === b) &&
       (!q || p.name.toLowerCase().includes(q) || p.barcode === q || (p.sku ?? '').toLowerCase() === q));
   });
+  brandOptions = computed(() => [...new Set(this.products().map(p => p.brand).filter(Boolean))]
+    .sort((a, b) => brandLabel(a).localeCompare(brandLabel(b))));
 
   filteredCustomers = computed(() => {
     const raw = this.customerQuery();
@@ -121,6 +129,30 @@ export class PosPage {
       const [p, c] = await Promise.all([this.data.products(), this.data.customers()]);
       this.products.set(p);
       this.customers.set(c);
+      const saleId = this.route.snapshot.queryParamMap.get('edit');
+      if (saleId) {
+        const sale = await this.data.sale(saleId);
+        if (!sale || sale.offline || sale.payments.length || sale.returns.length || sale.emptyCratesReturned || sale.isSettled) {
+          throw new Error('This invoice can no longer be edited.');
+        }
+        this.editingSaleId = sale.id;
+        this.editMode.set(true);
+        this.customer.set(c.find(item => item.id === sale.customerId) ?? await this.data.customer(sale.customerId) ?? null);
+        this.customerQuery.set(this.customer() ?? '');
+        this.cart.set(sale.items.map(item => {
+          const product = p.find(product => product.id === item.productId);
+          if (!product) throw new Error(`${item.productName} is no longer available.`);
+          return { key: item.id, product, quantity: item.quantity, unitPrice: item.unitPrice };
+        }));
+        this.editStockCredit.set(sale.items.reduce((credit, item) => {
+          credit.set(item.productId, (credit.get(item.productId) ?? 0) + item.quantity);
+          return credit;
+        }, new Map<string, number>()));
+        this.discount.set(sale.discount);
+        this.paymentMode.set(sale.paymentMode);
+        this.paid.set(0);
+        this.notes.set(sale.notes ?? '');
+      }
     } catch (e) {
       this.notify.error(e);
     } finally {
@@ -136,10 +168,12 @@ export class PosPage {
   /** Stock still free for this line (other lines of the same product count too). */
   stockLeft(p: Product, line?: CartLine): number {
     const used = this.cart().filter(l => l.product.id === p.id && l !== line).reduce((s, l) => s + l.quantity, 0);
-    return p.stockQuantity - used;
+    return p.stockQuantity + (this.editStockCredit().get(p.id) ?? 0) - used;
   }
 
-  available(p: Product): number { return p.stockQuantity - (this.inCart().get(p.id) ?? 0); }
+  available(p: Product): number {
+    return p.stockQuantity + (this.editStockCredit().get(p.id) ?? 0) - (this.inCart().get(p.id) ?? 0);
+  }
 
   // ---------- Cart actions ----------
 
@@ -223,16 +257,24 @@ export class PosPage {
     const customer = this.customer()!;
     this.saving.set(true);
     try {
-      const sale: Sale = await this.data.createSale({
-        id: uuid(),
+      const request = {
+        id: this.editMode() ? this.editingSaleId : uuid(),
         customerId: customer.id,
         items: this.cart().map(l => ({ productId: l.product.id, quantity: l.quantity, unitPrice: l.unitPrice })),
         discount: this.discount() || 0,
-        paidAmount: this.paidAmount(),
+        paidAmount: this.editMode() ? 0 : this.paidAmount(),
         paymentMode: this.paymentMode(),
-        cratesReturnedNow: this.cratesReturnedNow() || 0,
+        cratesReturnedNow: this.editMode() ? 0 : this.cratesReturnedNow() || 0,
         notes: this.notes() || null,
-      });
+      };
+      if (this.editMode()) {
+        if (!this.conn.online()) throw new Error('Connect to the internet to edit an invoice.');
+        const sale = await this.api.put<Sale>(`/sales/${this.editingSaleId}`, request);
+        this.notify.success(`Invoice ${sale.invoiceNumber} updated.`);
+        await this.router.navigate(['/sales', sale.id]);
+        return;
+      }
+      const sale: Sale = await this.data.createSale(request);
       const next = await firstValueFrom(this.dialog.open(SaleDoneDialog, { data: sale, width: '440px', disableClose: true }).afterClosed());
       this.reset();
       void this.load();

@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, inject, input, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -21,7 +22,7 @@ import { CustomerDialog } from './customer.dialog';
 
 @Component({
   selector: 'app-customer-detail',
-  imports: [DatePipe, RouterLink, MatButtonModule, MatTabsModule, DateRangeComponent, MoneyPipe],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatTabsModule, MatPaginatorModule, DateRangeComponent, MoneyPipe],
   template: `
   <div class="page">
     @if (customer(); as c) {
@@ -49,7 +50,7 @@ import { CustomerDialog } from './customer.dialog';
           <div class="value">{{ c.emptyCrateBalance }}</div>
           @if (auth.canSell && c.emptyCrateBalance > 0) { <button mat-button class="tile-btn" (click)="crates(c)">Collect crates</button> }
         </div>
-        <div class="stat"><div class="label">Open sales</div><div class="value">{{ openSales().length }}</div></div>
+        <div class="stat"><div class="label">Open sales</div><div class="value">{{ openSaleTotal() }}</div></div>
       </div>
 
       <mat-tab-group animationDuration="0ms">
@@ -59,6 +60,9 @@ import { CustomerDialog } from './customer.dialog';
               <table class="data">
                 <thead><tr><th>Invoice</th><th>Date</th><th class="right">Total</th><th class="right">Due</th><th class="right">Crates pending</th></tr></thead>
                 <tbody>
+                  @if (openSalesLoading()) {
+                    @for (i of [1,2,3]; track i) { <tr><td colspan="5"><div class="skeleton"></div></td></tr> }
+                  }
                   @for (s of openSales(); track s.id) {
                     <tr class="clickable" [routerLink]="['/sales', s.id]">
                       <td class="num">{{ s.invoiceNumber }}</td><td>{{ s.saleDate | date: 'dd MMM yyyy' }}</td>
@@ -66,10 +70,13 @@ import { CustomerDialog } from './customer.dialog';
                       <td class="right money" [class.neg]="s.balance > 0">{{ s.balance | money }}</td>
                       <td class="right num" [class.neg]="s.pendingCrates > 0">{{ s.pendingCrates }}</td>
                     </tr>
-                  } @empty { <tr><td colspan="5"><div class="empty">Nothing open — all settled.</div></td></tr> }
+                  }
+                  @if (!openSalesLoading() && openSales().length === 0) { <tr><td colspan="5"><div class="empty">Nothing open — all settled.</div></td></tr> }
                 </tbody>
               </table>
             </div>
+            <mat-paginator [length]="openSaleTotal()" [pageSize]="openSalePageSize" [pageIndex]="openSalePage() - 1"
+              [pageSizeOptions]="[25, 50, 100]" [disabled]="openSalesLoading()" (page)="onOpenSalesPage($event)" />
           </div>
         </mat-tab>
         <mat-tab label="Ledger">
@@ -133,18 +140,46 @@ export class CustomerDetailPage {
 
   customer = signal<Customer | null>(null);
   openSales = signal<SaleListItem[]>([]);
+  openSaleTotal = signal(0);
+  openSalePage = signal(1);
+  openSalePageSize = 25;
+  openSalesLoading = signal(false);
   ledger = signal<CustomerLedger | null>(null);
   range = signal<Range | null>(null);
+  private openSalesRequestId = 0;
 
   ngOnInit() { void this.load(); }
 
   async load() {
     try {
       this.customer.set((await this.data.customer(this.id())) ?? null);
-      const res = await this.data.sales({ customerId: this.id(), status: 'open', page: 1, pageSize: 200 });
-      this.openSales.set(res.items.filter(s => !s.isSettled));
+      await this.loadOpenSales();
       if (this.range()) await this.loadLedger();
     } catch (e) { this.notify.error(e); }
+  }
+
+  async loadOpenSales() {
+    const requestId = ++this.openSalesRequestId;
+    this.openSalesLoading.set(true);
+    try {
+      const res = await this.data.sales({
+        customerId: this.id(), status: 'open', page: this.openSalePage(), pageSize: this.openSalePageSize,
+      });
+      const items = res.items.filter(s => !s.isSettled);
+      if (requestId === this.openSalesRequestId) {
+        this.openSaleTotal.set(res.total);
+        this.openSales.set(res.fromCache
+          ? items.slice((this.openSalePage() - 1) * this.openSalePageSize, this.openSalePage() * this.openSalePageSize)
+          : items);
+      }
+    } catch (e) { if (requestId === this.openSalesRequestId) this.notify.error(e); }
+    finally { if (requestId === this.openSalesRequestId) this.openSalesLoading.set(false); }
+  }
+
+  onOpenSalesPage(e: PageEvent) {
+    this.openSalePageSize = e.pageSize;
+    this.openSalePage.set(e.pageIndex + 1);
+    void this.loadOpenSales();
   }
 
   async loadLedger() {

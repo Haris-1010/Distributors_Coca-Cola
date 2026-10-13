@@ -27,7 +27,7 @@ export interface Range { from: string; to: string; }
           <input matEndDate [ngModel]="toDate()" (ngModelChange)="toDate.set($event); custom()" placeholder="To">
         </mat-date-range-input>
         <mat-datepicker-toggle matIconSuffix [for]="rp" />
-        <mat-date-range-picker #rp />
+        <mat-date-range-picker #rp panelClass="app-calendar-panel" />
       </mat-form-field>
     </div>
   `,

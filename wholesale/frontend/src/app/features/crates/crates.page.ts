@@ -5,6 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -19,7 +20,7 @@ import { exportExcel, exportPdf } from '../../shared/export';
 
 @Component({
   selector: 'app-crates',
-  imports: [FormsModule, DatePipe, RouterLink, MatButtonModule, MatTabsModule, MatFormFieldModule, MatInputModule],
+  imports: [FormsModule, DatePipe, RouterLink, MatButtonModule, MatTabsModule, MatPaginatorModule, MatFormFieldModule, MatInputModule],
   template: `
   <div class="page">
     <div class="page-head">
@@ -36,7 +37,7 @@ import { exportExcel, exportPdf } from '../../shared/export';
       <div class="stat" [class.alert]="overdue() > 0"><div class="label">Owing for 7+ days</div><div class="value">{{ overdue() }}</div><div class="hint">customers</div></div>
     </div>
 
-    <mat-tab-group animationDuration="0ms">
+    <mat-tab-group animationDuration="0ms" (selectedTabChange)="onTab($event.index)">
       <mat-tab label="Who owes crates">
         <div class="tab">
           <mat-form-field class="full" style="max-width:360px">
@@ -80,6 +81,9 @@ import { exportExcel, exportPdf } from '../../shared/export';
             <table class="data">
               <thead><tr><th>Date</th><th>Customer</th><th>Type</th><th>Invoice</th><th class="right">Crates</th><th>Note</th></tr></thead>
               <tbody>
+                @if (historyLoading()) {
+                  @for (i of [1,2,3,4,5]; track i) { <tr><td colspan="6"><div class="skeleton"></div></td></tr> }
+                }
                 @for (t of history(); track t.id) {
                   <tr>
                     <td>{{ t.date | date: 'dd MMM yy, HH:mm' }}</td>
@@ -90,9 +94,14 @@ import { exportExcel, exportPdf } from '../../shared/export';
                     <td class="muted">{{ t.notes }}</td>
                   </tr>
                 }
+                @if (!historyLoading() && history().length === 0) {
+                  <tr><td colspan="6"><div class="empty">No crate history found.</div></td></tr>
+                }
               </tbody>
             </table>
           </div>
+          <mat-paginator [length]="historyTotal()" [pageSize]="historyPageSize" [pageIndex]="historyPage() - 1"
+            [pageSizeOptions]="[25, 50, 100]" [disabled]="historyLoading()" (page)="onHistoryPage($event)" />
         </div>
       </mat-tab>
     </mat-tab-group>
@@ -110,7 +119,12 @@ export class CratesPage {
   rows = signal<CustomerCrateSummary[]>([]);
   history = signal<CrateTransaction[]>([]);
   loading = signal(true);
+  historyTotal = signal(0);
+  historyPage = signal(1);
+  historyPageSize = 25;
+  historyLoading = signal(false);
   search = signal('');
+  private historyRequestId = 0;
 
   owing = computed(() => this.rows().filter(r => r.pendingCrates > 0));
   filtered = computed(() => {
@@ -131,7 +145,6 @@ export class CratesPage {
     try {
       if (this.net.online()) {
         this.rows.set(await this.api.get<CustomerCrateSummary[]>('/empty-crates/summary', { onlyPending: true }));
-        this.history.set((await this.api.get<Paged<CrateTransaction>>('/empty-crates/transactions', { pageSize: 100 })).items);
       } else {
         // Offline: build from cached customer balances.
         const cs = await db.customers.toArray();
@@ -141,6 +154,31 @@ export class CratesPage {
         })));
       }
     } catch (e) { this.notify.error(e); } finally { this.loading.set(false); }
+  }
+
+  onTab(index: number) {
+    if (index === 1 && this.net.online()) void this.loadHistory();
+  }
+
+  async loadHistory() {
+    const requestId = ++this.historyRequestId;
+    this.historyLoading.set(true);
+    try {
+      const res = await this.api.get<Paged<CrateTransaction>>('/empty-crates/transactions', {
+        page: this.historyPage(), pageSize: this.historyPageSize,
+      });
+      if (requestId === this.historyRequestId) {
+        this.history.set(res.items);
+        this.historyTotal.set(res.total);
+      }
+    } catch (e) { if (requestId === this.historyRequestId) this.notify.error(e); }
+    finally { if (requestId === this.historyRequestId) this.historyLoading.set(false); }
+  }
+
+  onHistoryPage(e: PageEvent) {
+    this.historyPageSize = e.pageSize;
+    this.historyPage.set(e.pageIndex + 1);
+    void this.loadHistory();
   }
 
   async collect(r: CustomerCrateSummary) {

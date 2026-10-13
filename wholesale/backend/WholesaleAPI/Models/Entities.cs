@@ -35,7 +35,7 @@ public class RefreshToken : BaseEntity
 public class Product : BaseEntity
 {
     public string Name { get; set; } = "";
-    public Brand Brand { get; set; }
+    public string Brand { get; set; } = "Other";
     public string Category { get; set; } = "Soft Drink";
     public UnitType UnitType { get; set; }
     public string? PackSize { get; set; }

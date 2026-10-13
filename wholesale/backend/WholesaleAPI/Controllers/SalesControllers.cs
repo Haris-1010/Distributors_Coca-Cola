@@ -20,6 +20,10 @@ public class CustomersController : ControllerBase
     public Task<List<CustomerDto>> List(string? search, bool includeInactive = false, string? filter = null)
         => _customers.ListAsync(search, includeInactive, filter);
 
+    [HttpGet("paged")]
+    public Task<CustomerPageDto> ListPaged(string? search, bool includeInactive = false, string? filter = null, int page = 1, int pageSize = 25)
+        => _customers.ListPagedAsync(search, includeInactive, filter, Math.Max(1, page), Math.Clamp(pageSize, 1, 100));
+
     [HttpGet("{id:guid}")] public Task<CustomerDto> Get(Guid id) => _customers.GetAsync(id);
 
     [HttpGet("{id:guid}/ledger"), Authorize(Roles = "SuperAdmin,Admin,Manager,Salesman,Viewer")]
@@ -61,6 +65,9 @@ public class SalesController : ControllerBase
 
     [HttpPost, Authorize(Roles = RoleGroups.Sellers)]
     public Task<SaleDto> Create(CreateSaleRequest req) => _sales.CreateAsync(req);
+
+    [HttpPut("{id:guid}"), Authorize(Roles = RoleGroups.Sellers)]
+    public Task<SaleDto> Update(Guid id, CreateSaleRequest req) => _sales.UpdateAsync(id, req);
 
     [HttpPost("{id:guid}/payments"), Authorize(Roles = RoleGroups.Sellers)]
     public Task<SaleDto> Pay(Guid id, CustomerPaymentRequest req) => _sales.AddPaymentAsync(id, req);

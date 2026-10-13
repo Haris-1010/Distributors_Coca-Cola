@@ -32,6 +32,12 @@ import { CratesPipe, MoneyPipe, WordsPipe } from '../../shared/pipes';
         </div>
         <div class="actions">
           <a mat-stroked-button [routerLink]="['/sales', s.id, 'print']"><span class="material-symbols-outlined">print</span> Invoice</a>
+          @if (auth.canSell && net.online() && !s.offline && !s.isSettled && !s.settlementOverridden
+            && s.payments.length === 0 && s.returns.length === 0 && s.emptyCratesReturned === 0) {
+            <a mat-stroked-button [routerLink]="['/pos']" [queryParams]="{ edit: s.id }">
+              <span class="material-symbols-outlined">edit</span> Edit invoice
+            </a>
+          }
           @if (auth.canSell && !s.offline) {
             <a mat-stroked-button routerLink="/returns" [queryParams]="{ saleId: s.id }"><span class="material-symbols-outlined">assignment_return</span> Return items</a>
           }

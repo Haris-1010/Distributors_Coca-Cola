@@ -92,10 +92,11 @@ mat-icon.material-symbols-outlined { font-family: 'Material Symbols Outlined'; }
   mat-form-field { width: 200px; }
   .grow { flex: 1; min-width: 220px; }
 }
-.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px;
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
   .span-2 { grid-column: span 2; }
   @media (max-width: 640px) { grid-template-columns: 1fr; .span-2 { grid-column: auto; } }
 }
+form:not(.form-grid) > mat-form-field { margin-bottom: 12px; }
 
 // ---------- Numbers ----------
 .num, .money { font-family: var(--app-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -162,3 +163,21 @@ table.data {
 .mdc-button__label { display: inline-flex; align-items: center; gap: 6px; }
 .mdc-button .material-symbols-outlined { font-size: 20px; line-height: 1; }
 .mat-mdc-icon-button .material-symbols-outlined { font-size: 22px; }
+
+// ---------- Date pickers ----------
+.app-calendar-panel .mat-datepicker-content {
+  border: 1px solid var(--app-border);
+  border-radius: 18px;
+  box-shadow: 0 18px 50px rgba(10, 47, 92, .18);
+  overflow: hidden;
+}
+.app-calendar-panel .mat-calendar { width: 320px; }
+.app-calendar-panel .mat-calendar-body-selected { background: var(--app-blue); color: #fff; }
+.app-calendar-panel .mat-calendar-body-today:not(.mat-calendar-body-selected) { border-color: var(--app-red); }
+.app-calendar-panel .mat-calendar-body-cell:not(.mat-calendar-body-disabled):hover
+  > .mat-calendar-body-cell-content:not(.mat-calendar-body-selected) {
+  background: color-mix(in srgb, var(--app-blue) 12%, transparent);
+}
+.date-input-compact { width: 156px; }
+.date-input-compact .mat-mdc-form-field-infix { min-height: 34px; padding-block: 4px !important; }
+.date-input-compact .mat-mdc-form-field-subscript-wrapper { display: none; }

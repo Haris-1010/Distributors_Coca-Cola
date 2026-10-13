@@ -31,6 +31,7 @@ export const routes: Routes = [
       { path: 'stock', loadComponent: () => import('./features/stock/stock.page').then(m => m.StockPage) },
       { path: 'purchases', canActivate: [roleGuard], data: { roles: REPORTS }, loadComponent: () => import('./features/purchases/purchases.page').then(m => m.PurchasesPage) },
       { path: 'purchases/new', canActivate: [roleGuard], data: { roles: MANAGERS }, loadComponent: () => import('./features/purchases/purchase-new.page').then(m => m.PurchaseNewPage) },
+      { path: 'purchases/:id/edit', canActivate: [roleGuard], data: { roles: MANAGERS }, loadComponent: () => import('./features/purchases/purchase-new.page').then(m => m.PurchaseNewPage) },
       { path: 'purchases/:id', canActivate: [roleGuard], data: { roles: REPORTS }, loadComponent: () => import('./features/purchases/purchase-detail.page').then(m => m.PurchaseDetailPage) },
       { path: 'reports', canActivate: [roleGuard], data: { roles: REPORTS }, loadComponent: () => import('./features/reports/reports.page').then(m => m.ReportsPage) },
       { path: 'users', canActivate: [roleGuard], data: { roles: ADMINS }, loadComponent: () => import('./features/users/users.page').then(m => m.UsersPage) },

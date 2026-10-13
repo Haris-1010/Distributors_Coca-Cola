@@ -1,6 +1,9 @@
 <div class="pos-layout">
   <!-- ============ Products ============ -->
   <section class="catalog">
+    @if (editMode()) {
+      <div class="edit-banner"><span class="material-symbols-outlined">edit_note</span>Editing invoice · products and quantities can be changed</div>
+    }
     <div class="search-row">
       <div class="search">
         <span class="material-symbols-outlined">search</span>
@@ -10,9 +13,9 @@
       </div>
       <mat-button-toggle-group [value]="brand()" (change)="brand.set($event.value)" hideSingleSelectionIndicator aria-label="Brand">
         <mat-button-toggle value="All">All</mat-button-toggle>
-        <mat-button-toggle value="Pepsi">Pepsi</mat-button-toggle>
-        <mat-button-toggle value="CocaCola">Coca-Cola</mat-button-toggle>
-        <mat-button-toggle value="Other">Other</mat-button-toggle>
+        @for (brand of brandOptions(); track brand) {
+          <mat-button-toggle [value]="brand">{{ brand | brand }}</mat-button-toggle>
+        }
       </mat-button-toggle-group>
     </div>
     <p class="tip muted small">Tap a product to add a full crate / pack · Shift-tap adds one piece · <b>F9</b> completes the sale</p>
@@ -45,6 +48,10 @@
 
   <!-- ============ Cart ============ -->
   <aside class="cart">
+    <div class="cart-title">
+      <div><strong>{{ editMode() ? 'Edit invoice' : 'Current sale' }}</strong><span>{{ cart().length }} {{ cart().length === 1 ? 'item' : 'items' }}</span></div>
+      @if (editMode()) { <span class="chip amber">Invoice edit</span> }
+    </div>
     <!-- Customer -->
     <div class="block customer">
       @if (customer(); as c) {
@@ -53,7 +60,7 @@
             <div class="cust-name">{{ c.businessName || c.name }}</div>
             <div class="small muted">{{ c.businessName ? c.name + ' · ' : '' }}{{ c.phone }}</div>
           </div>
-          <button mat-icon-button (click)="clearCustomer()" aria-label="Change customer"><mat-icon class="material-symbols-outlined">close</mat-icon></button>
+          @if (!editMode()) { <button mat-icon-button (click)="clearCustomer()" aria-label="Change customer"><mat-icon class="material-symbols-outlined">close</mat-icon></button> }
         </div>
         <div class="cust-flags">
           <span class="chip" [class.red]="c.outstandingBalance > 0" [class.green]="c.outstandingBalance <= 0">
@@ -121,7 +128,12 @@
     </div>
 
     <!-- Crates -->
-    @if (cratesRequired() > 0 || cratesOwedBefore() > 0) {
+    @if (editMode()) {
+      <div class="block crates">
+        <div class="crates-head"><span class="material-symbols-outlined">inventory_2</span> Empty crates</div>
+        <div class="crates-grid"><span>This invoice will issue</span><b class="num">{{ cratesRequired() }}</b><span>Currently owed by customer</span><b class="num">{{ cratesOwedBefore() }}</b></div>
+      </div>
+    } @else if (cratesRequired() > 0 || cratesOwedBefore() > 0) {
       <div class="block crates" [class.alert]="cratesOwedAfter() > 0">
         <div class="crates-head"><span class="material-symbols-outlined">inventory_2</span> Empty crates</div>
         <div class="crates-grid">
@@ -151,6 +163,7 @@
         }
       </div>
 
+      @if (!editMode()) {
       <div class="modes">
         @for (m of paymentModes; track m.value) {
           <button class="mode" [class.on]="paymentMode() === m.value" (click)="setMode(m.value)">{{ m.value === 'Credit' ? 'Credit' : m.label }}</button>
@@ -164,6 +177,7 @@
           <button mat-button (click)="paid.set(null)">Full</button>
         </div>
       }
+      }
       @if (balanceDue() > 0) { <div class="due">On credit: <b class="money">{{ balanceDue() | money }}</b></div> }
       @if (paidAmount() > netAmount()) { <div class="small muted">Extra {{ (paidAmount() - netAmount()) | money }} clears older dues.</div> }
 
@@ -174,12 +188,13 @@
 
       <div class="row nowrap">
         <button mat-button (click)="clearCart()" [disabled]="!cart().length">Clear</button>
-        <button mat-flat-button class="complete" [disabled]="!canComplete()" (click)="complete()">
+        <button mat-flat-button class="complete" [disabled]="!canComplete() || (editMode() && !conn.online())" (click)="complete()">
           @if (saving()) { <mat-spinner diameter="18" /> } @else {
-            {{ conn.online() ? 'Complete sale' : 'Save sale offline' }} · {{ netAmount() | money }}
+            {{ editMode() ? 'Save invoice changes' : conn.online() ? 'Complete sale' : 'Save sale offline' }} · {{ netAmount() | money }}
           }
         </button>
       </div>
+      @if (editMode() && !conn.online()) { <div class="small neg">Connect to the internet to save invoice changes.</div> }
       @if (!customer() && cart().length) { <div class="small neg">Choose a customer to finish.</div> }
     </div>
   </aside>

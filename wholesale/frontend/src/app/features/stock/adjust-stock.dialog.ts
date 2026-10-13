@@ -9,45 +9,49 @@ import { MatSelectModule } from '@angular/material/select';
 import { ApiService } from '../../core/api.service';
 import { StockBatch, StockSummary } from '../../core/models';
 import { NotifyService } from '../../core/notify.service';
+import { DateInputComponent } from '../../shared/date-input';
 
 @Component({
   selector: 'app-adjust-stock',
-  imports: [FormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatButtonToggleModule],
+  imports: [FormsModule, MatDialogModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatButtonToggleModule, DateInputComponent],
   template: `
     <h2 mat-dialog-title>Adjust stock</h2>
     <mat-dialog-content>
       <p class="muted small" style="margin-top:0">For breakage, counting corrections or opening stock. Stock bought from a distributor should be entered as a purchase.</p>
-      <mat-button-toggle-group [(ngModel)]="direction" hideSingleSelectionIndicator style="margin-bottom:14px">
-        <mat-button-toggle value="out">Remove (breakage, loss)</mat-button-toggle>
-        <mat-button-toggle value="in">Add (found, opening stock)</mat-button-toggle>
-      </mat-button-toggle-group>
-      <mat-form-field class="full">
-        <mat-label>Product</mat-label>
-        <mat-select [(ngModel)]="productId" (ngModelChange)="loadBatches()">
-          @for (p of products; track p.productId) { <mat-option [value]="p.productId">{{ p.productName }} ({{ p.quantity }})</mat-option> }
-        </mat-select>
-      </mat-form-field>
-      @if (direction === 'out') {
+      <div class="adjust-fields">
+        <mat-button-toggle-group [(ngModel)]="direction" hideSingleSelectionIndicator>
+          <mat-button-toggle value="out">Remove (breakage, loss)</mat-button-toggle>
+          <mat-button-toggle value="in">Add (found, opening stock)</mat-button-toggle>
+        </mat-button-toggle-group>
         <mat-form-field class="full">
-          <mat-label>Batch</mat-label>
-          <mat-select [(ngModel)]="batchId">
-            @for (b of batches(); track b.id) { <mat-option [value]="b.id">{{ b.batchNumber }} · {{ b.quantity }} pcs{{ b.expiryDate ? ' · exp ' + b.expiryDate : '' }}</mat-option> }
+          <mat-label>Product</mat-label>
+          <mat-select [(ngModel)]="productId" (ngModelChange)="loadBatches()">
+            @for (p of products; track p.productId) { <mat-option [value]="p.productId">{{ p.productName }} ({{ p.quantity }})</mat-option> }
           </mat-select>
         </mat-form-field>
-      } @else {
-        <div class="form-grid">
-          <mat-form-field><mat-label>Batch no. (optional)</mat-label><input matInput [(ngModel)]="batchNumber"></mat-form-field>
-          <mat-form-field><mat-label>Expiry (optional)</mat-label><input matInput type="date" [(ngModel)]="expiry"></mat-form-field>
-        </div>
-      }
-      <mat-form-field class="full"><mat-label>Pieces</mat-label><input matInput type="number" min="1" [(ngModel)]="qty"></mat-form-field>
-      <mat-form-field class="full"><mat-label>Reason</mat-label><input matInput [(ngModel)]="reason" placeholder="e.g. 3 bottles broken while unloading"></mat-form-field>
+        @if (direction === 'out') {
+          <mat-form-field class="full">
+            <mat-label>Batch</mat-label>
+            <mat-select [(ngModel)]="batchId">
+              @for (b of batches(); track b.id) { <mat-option [value]="b.id">{{ b.batchNumber }} · {{ b.quantity }} pcs{{ b.expiryDate ? ' · exp ' + b.expiryDate : '' }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+        } @else {
+          <div class="form-grid">
+            <mat-form-field><mat-label>Batch no. (optional)</mat-label><input matInput [(ngModel)]="batchNumber"></mat-form-field>
+            <app-date-input label="Expiry (optional)" [(ngModel)]="expiry" />
+          </div>
+        }
+        <mat-form-field class="full"><mat-label>Pieces</mat-label><input matInput type="number" min="1" [(ngModel)]="qty"></mat-form-field>
+        <mat-form-field class="full"><mat-label>Reason</mat-label><input matInput [(ngModel)]="reason" placeholder="e.g. 3 bottles broken while unloading"></mat-form-field>
+      </div>
     </mat-dialog-content>
     <mat-dialog-actions align="end">
       <button mat-button mat-dialog-close>Cancel</button>
       <button mat-flat-button [disabled]="!valid() || busy()" (click)="save()">Save</button>
     </mat-dialog-actions>
   `,
+  styles: `.adjust-fields { display: grid; gap: 12px; }`,
 })
 export class AdjustStockDialog {
   products = inject<StockSummary[]>(MAT_DIALOG_DATA);

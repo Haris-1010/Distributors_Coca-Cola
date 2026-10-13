@@ -23,6 +23,7 @@ import { MoneyPipe } from '../../shared/pipes';
           <div class="sub">{{ p.distributorName }} · {{ p.purchaseDate | date: 'dd MMM yyyy' }}</div></div>
         <div class="actions">
           <button mat-stroked-button (click)="print()"><span class="material-symbols-outlined">print</span> Print</button>
+          @if (auth.isManager && !p.offline) { <a mat-stroked-button [routerLink]="['/purchases', p.id, 'edit']"><span class="material-symbols-outlined">edit</span> Edit</a> }
           @if (auth.isManager && p.balance > 0) { <button mat-flat-button (click)="pay(p)">Record payment</button> }
         </div>
       </div>

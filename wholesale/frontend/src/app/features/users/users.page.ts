@@ -36,7 +36,7 @@ const ROLE_HELP: Record<UserRole, string> = {
           <mat-form-field class="full"><mat-label>Temporary password</mat-label><input matInput formControlName="password">
             <mat-hint>8+ characters with a capital, small letter and number. They'll change it at first sign-in.</mat-hint></mat-form-field>
         }
-        <mat-form-field class="full" style="margin-top:8px"><mat-label>Role</mat-label>
+        <mat-form-field class="full"><mat-label>Role</mat-label>
           <mat-select formControlName="role">
             @for (r of roles; track r) { @if (r !== 'SuperAdmin' || auth.hasRole('SuperAdmin')) { <mat-option [value]="r">{{ r }} <small class="muted">— {{ help[r] }}</small></mat-option> } }
           </mat-select></mat-form-field>

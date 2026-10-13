@@ -193,6 +193,101 @@ public class SaleService
         return await GetAsync(saleId);
     }
 
+    public async Task<SaleDto> UpdateAsync(Guid saleId, CreateSaleRequest req)
+    {
+        await _db.InTransactionAsync(async () =>
+        {
+            var sale = await _settle.LockSaleAsync(saleId);
+            var customer = await _settle.LockCustomerAsync(sale.CustomerId);
+            var hasPayments = await _db.Payments.AnyAsync(p => p.SaleId == saleId);
+            var hasReturns = await _db.SaleReturns.AnyAsync(r => r.SaleId == saleId);
+            if (sale.IsSettled || sale.SettlementOverridden || sale.EmptyCratesReturned > 0 || hasPayments || hasReturns)
+                throw new AppException("Only invoices with no payments, returns, or collected crates can be edited.", 409, "sale_not_editable");
+            if (req.CustomerId != sale.CustomerId)
+                throw new AppException("An invoice's customer cannot be changed.");
+
+            var oldNet = sale.NetAmount;
+            var oldDiscount = sale.Discount;
+            var oldCrates = sale.EmptyCratesRequired;
+            foreach (var item in sale.Items)
+                await _stock.RestoreForSaleEditAsync(sale.Id, item.Allocations, item.ProductId);
+
+            _db.SaleItemAllocations.RemoveRange(sale.Items.SelectMany(i => i.Allocations));
+            _db.SaleItems.RemoveRange(sale.Items);
+            sale.Items.Clear();
+
+            var isManager = _user.IsInRole(UserRole.SuperAdmin, UserRole.Admin, UserRole.Manager);
+            if (req.Discount > oldDiscount && !isManager)
+                throw AppException.Forbidden("Only a Manager or Admin can give a discount.");
+            var productIds = req.Items.Select(i => i.ProductId).Distinct().ToList();
+            var products = await _db.Products.Where(p => productIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
+            var perCrate = await _settings.ProfitIsPerCrateAsync();
+            var lines = req.Items.GroupBy(i => new { i.ProductId, i.UnitPrice })
+                .Select(g => new { g.Key.ProductId, g.Key.UnitPrice, Quantity = g.Sum(x => x.Quantity) });
+            decimal grossProfit = 0;
+
+            foreach (var line in lines)
+            {
+                if (!products.TryGetValue(line.ProductId, out var product) || !product.IsActive)
+                    throw new AppException("A product on this invoice no longer exists or is inactive.");
+                var price = line.UnitPrice ?? product.SellingPrice;
+                var minProfit = perCrate && product.BottlesPerCrate > 0
+                    ? Math.Round(product.MinProfit / product.BottlesPerCrate, 2) : product.MinProfit;
+                var minPrice = product.PurchasePrice + minProfit;
+                if (price < minPrice && !isManager)
+                    throw AppException.Forbidden($"{product.Name}: Rs {price:N2} is below the minimum Rs {minPrice:N2}.");
+
+                var item = new SaleItem
+                {
+                    SaleId = sale.Id, ProductId = product.Id, ProductName = product.Name,
+                    Quantity = line.Quantity, UnitPrice = price, Total = Money.R(price * line.Quantity),
+                    IsCrateRequired = product.IsCrateRequired, BottlesPerCrate = product.BottlesPerCrate,
+                    PriceOverridden = price != product.SellingPrice,
+                };
+                item.Allocations = await _stock.DeductFifoAsync(product, line.Quantity, sale.Id, $"Sale {sale.InvoiceNumber} (edited)");
+                foreach (var allocation in item.Allocations) allocation.SaleItemId = item.Id;
+                var cost = item.Allocations.Sum(a => a.Quantity * a.UnitCost);
+                item.PurchasePriceAtSale = Money.R(cost / line.Quantity);
+                item.ProfitPerUnit = Money.R(price - cost / line.Quantity);
+                grossProfit += item.Total - cost;
+                sale.Items.Add(item);
+            }
+
+            sale.Discount = Money.R(req.Discount);
+            sale.Notes = req.Notes;
+            sale.TotalAmount = sale.Items.Sum(i => i.Total);
+            if (sale.Discount > sale.TotalAmount) throw new AppException("Discount is more than the sale total.");
+            sale.ProfitAmount = Money.R(grossProfit - sale.Discount);
+            SettlementService.Recalculate(sale);
+            customer.OutstandingBalance = Money.R(customer.OutstandingBalance + sale.NetAmount - oldNet);
+            var updatedCrateBalance = customer.EmptyCrateBalance + sale.EmptyCratesRequired - oldCrates;
+            if (updatedCrateBalance < 0)
+                throw new AppException("The invoice cannot be changed because it would reduce the customer's crate balance below zero.");
+            customer.EmptyCrateBalance = updatedCrateBalance;
+
+            var issued = await _db.EmptyCrateTransactions.FirstOrDefaultAsync(t =>
+                t.SaleId == saleId && t.TransactionType == CrateTransactionType.Issued);
+            if (issued != null) issued.Quantity = sale.EmptyCratesRequired;
+            else if (sale.EmptyCratesRequired > 0)
+                _db.EmptyCrateTransactions.Add(new EmptyCrateTransaction
+                {
+                    CustomerId = customer.Id, SaleId = sale.Id, TransactionType = CrateTransactionType.Issued,
+                    Quantity = sale.EmptyCratesRequired, Date = sale.SaleDate,
+                    Notes = $"Sale {sale.InvoiceNumber}", CreatedByUserId = _user.Id,
+                });
+
+            _db.AuditLogs.Add(new AuditLog
+            {
+                UserId = _user.Id, Action = "Update", Entity = nameof(Sale), EntityId = sale.Id.ToString(),
+                OldValues = System.Text.Json.JsonSerializer.Serialize(new { oldNet, oldCrates }),
+                NewValues = System.Text.Json.JsonSerializer.Serialize(new { sale.NetAmount, sale.EmptyCratesRequired }),
+            });
+            await _db.SaveChangesAsync();
+            return true;
+        });
+        return await GetAsync(saleId);
+    }
+
     public async Task<SaleDto> AddPaymentAsync(Guid saleId, CustomerPaymentRequest req)
     {
         await _db.InTransactionAsync(async () =>

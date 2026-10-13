@@ -24,18 +24,20 @@ public class ProductService
         _audit = audit;
     }
 
-    public async Task<List<ProductDto>> ListAsync(string? search, bool includeInactive, Brand? brand)
+    public async Task<List<ProductDto>> ListAsync(string? search, bool includeInactive, string? brand)
     {
-        var q = _db.Products.AsNoTracking().AsQueryable();
-        if (!includeInactive) q = q.Where(p => p.IsActive);
-        if (brand.HasValue) q = q.Where(p => p.Brand == brand);
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var s = search.Trim();
-            q = q.Where(p => EF.Functions.ILike(p.Name, $"%{s}%") || p.Barcode == s || p.Sku == s);
-        }
+        var q = FilterProducts(search, includeInactive, brand);
         var products = await q.OrderBy(p => p.Name).ToListAsync();
         return await ToDtosAsync(products);
+    }
+
+    public async Task<PagedResult<ProductDto>> ListPagedAsync(string? search, bool includeInactive, string? brand, int page, int pageSize)
+    {
+        var q = FilterProducts(search, includeInactive, brand);
+        var total = await q.CountAsync();
+        var products = await q.OrderBy(p => p.Name).ThenBy(p => p.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+        return new PagedResult<ProductDto>(await ToDtosAsync(products), total, page, pageSize);
     }
 
     public async Task<ProductDto> GetAsync(Guid id)
@@ -121,5 +123,18 @@ public class ProductService
             dto.MinSellingPrice = p.PurchasePrice + minProfit;
             return dto;
         }).ToList();
+    }
+
+    private IQueryable<Product> FilterProducts(string? search, bool includeInactive, string? brand)
+    {
+        var q = _db.Products.AsNoTracking().AsQueryable();
+        if (!includeInactive) q = q.Where(p => p.IsActive);
+        if (!string.IsNullOrWhiteSpace(brand)) q = q.Where(p => p.Brand == brand);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var s = search.Trim();
+            q = q.Where(p => EF.Functions.ILike(p.Name, $"%{s}%") || p.Barcode == s || p.Sku == s);
+        }
+        return q;
     }
 }

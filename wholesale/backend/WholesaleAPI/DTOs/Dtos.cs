@@ -37,7 +37,7 @@ public class ProductDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
-    public Brand Brand { get; set; }
+    public string Brand { get; set; } = "Other";
     public string Category { get; set; } = "";
     public UnitType UnitType { get; set; }
     public string? PackSize { get; set; }
@@ -58,7 +58,7 @@ public class ProductDto
 }
 
 public record SaveProductRequest(
-    string Name, Brand Brand, string Category, UnitType UnitType, string? PackSize,
+    string Name, string Brand, string Category, UnitType UnitType, string? PackSize,
     bool IsCrateRequired, int BottlesPerCrate, decimal PurchasePrice, decimal SellingPrice,
     decimal MinProfit, decimal MaxProfit, string? Barcode, string? Sku, int LowStockThreshold, bool IsActive);
 
@@ -83,7 +83,7 @@ public class StockSummaryDto
 {
     public Guid ProductId { get; set; }
     public string ProductName { get; set; } = "";
-    public Brand Brand { get; set; }
+    public string Brand { get; set; } = "Other";
     public UnitType UnitType { get; set; }
     public int BottlesPerCrate { get; set; }
     public int Quantity { get; set; }
@@ -102,9 +102,9 @@ public record StockAdjustmentRequest(
 
 public class StockAlertsDto
 {
-    public List<StockSummaryDto> LowStock { get; set; } = new();
-    public List<StockBatchDto> NearExpiry { get; set; } = new();
-    public List<StockBatchDto> Expired { get; set; } = new();
+    public int LowStockCount { get; set; }
+    public int NearExpiryCount { get; set; }
+    public int ExpiredCount { get; set; }
 }
 
 // ---------- Purchases ----------
@@ -113,6 +113,12 @@ public record PurchaseItemRequest(Guid ProductId, int Quantity, decimal UnitPric
 public record CreatePurchaseRequest(
     Guid? Id, string? InvoiceNumber, string DistributorName, DateTime? PurchaseDate,
     decimal PaidAmount, string? Notes, List<PurchaseItemRequest> Items);
+
+public record UpdatePurchaseItemRequest(Guid? Id, Guid ProductId, int Quantity, decimal UnitPrice, string? BatchNumber, DateOnly? ExpiryDate);
+
+public record UpdatePurchaseRequest(
+    string InvoiceNumber, string DistributorName, DateTime PurchaseDate,
+    string? Notes, List<UpdatePurchaseItemRequest> Items);
 
 public record PurchasePaymentRequest(decimal Amount, string? Notes);
 
@@ -158,6 +164,10 @@ public class CustomerDto
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
+
+public record CustomerPageDto(
+    IReadOnlyList<CustomerDto> Items, int Total, int Page, int PageSize,
+    int CustomerCount, decimal TotalDue, int TotalCrates);
 
 public record SaveCustomerRequest(Guid? Id, string Name, string? Phone, string? Address, string? BusinessName,
     CustomerType CustomerType, bool IsActive = true);

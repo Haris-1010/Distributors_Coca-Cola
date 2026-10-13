@@ -5,6 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -23,7 +24,7 @@ interface Movement { id: string; productName: string; movementType: string; quan
 
 @Component({
   selector: 'app-stock',
-  imports: [FormsModule, DatePipe, RouterLink, MatButtonModule, MatTabsModule, MatFormFieldModule, MatInputModule, MoneyPipe, CratesPipe, BrandPipe, WordsPipe],
+  imports: [FormsModule, DatePipe, RouterLink, MatButtonModule, MatTabsModule, MatPaginatorModule, MatFormFieldModule, MatInputModule, MoneyPipe, CratesPipe, BrandPipe, WordsPipe],
   template: `
   <div class="page">
     <div class="page-head">
@@ -41,12 +42,12 @@ interface Movement { id: string; productName: string; movementType: string; quan
     <div class="stats">
       <div class="stat"><div class="label">Stock value (at cost)</div><div class="value">{{ totalValue() | money }}</div></div>
       <div class="stat"><div class="label">Full crates / packs</div><div class="value">{{ totalCrates() }}</div></div>
-      <div class="stat" [class.alert]="(alerts()?.lowStock?.length ?? 0) > 0"><div class="label">Low stock</div><div class="value">{{ alerts()?.lowStock?.length ?? '—' }}</div></div>
-      <div class="stat" [class.alert]="(alerts()?.nearExpiry?.length ?? 0) + (alerts()?.expired?.length ?? 0) > 0">
-        <div class="label">Expiring / expired batches</div><div class="value">{{ alerts() ? alerts()!.nearExpiry.length + ' / ' + alerts()!.expired.length : '—' }}</div></div>
+      <div class="stat" [class.alert]="(alerts()?.lowStockCount ?? 0) > 0"><div class="label">Low stock</div><div class="value">{{ alerts()?.lowStockCount ?? '—' }}</div></div>
+      <div class="stat" [class.alert]="(alerts()?.nearExpiryCount ?? 0) + (alerts()?.expiredCount ?? 0) > 0">
+        <div class="label">Expiring / expired batches</div><div class="value">{{ alerts() ? alerts()!.nearExpiryCount + ' / ' + alerts()!.expiredCount : '—' }}</div></div>
     </div>
 
-    <mat-tab-group animationDuration="0ms">
+    <mat-tab-group animationDuration="0ms" (selectedTabChange)="onTab($event.index)">
       <mat-tab label="By product">
         <div class="tab">
           <mat-form-field class="full" style="max-width:360px"><mat-label>Search</mat-label><input matInput [ngModel]="search()" (ngModelChange)="search.set($event)"></mat-form-field>
@@ -75,6 +76,9 @@ interface Movement { id: string; productName: string; movementType: string; quan
             <table class="data">
               <thead><tr><th>Product</th><th>Batch</th><th>Expiry</th><th class="right">Pieces</th><th class="right">Cost/pc</th><th>Location</th></tr></thead>
               <tbody>
+                @if (batchesLoading()) {
+                  @for (i of [1,2,3,4,5]; track i) { <tr><td colspan="6"><div class="skeleton"></div></td></tr> }
+                }
                 @for (b of batches(); track b.id) {
                   <tr>
                     <td>{{ b.productName }}</td><td class="num">{{ b.batchNumber }}</td>
@@ -90,9 +94,14 @@ interface Movement { id: string; productName: string; movementType: string; quan
                     <td>{{ b.location }}</td>
                   </tr>
                 }
+                @if (!batchesLoading() && batches().length === 0) {
+                  <tr><td colspan="6"><div class="empty">No stock batches found.</div></td></tr>
+                }
               </tbody>
             </table>
           </div>
+          <mat-paginator [length]="batchTotal()" [pageSize]="batchPageSize" [pageIndex]="batchPage() - 1"
+            [pageSizeOptions]="[25, 50, 100]" [disabled]="batchesLoading()" (page)="onBatchPage($event)" />
         </div>
       </mat-tab>
       @if (auth.isManager) {
@@ -102,6 +111,9 @@ interface Movement { id: string; productName: string; movementType: string; quan
               <table class="data">
                 <thead><tr><th>When</th><th>Product</th><th>Type</th><th class="right">Qty</th><th>Reason / ref</th></tr></thead>
                 <tbody>
+                  @if (movementsLoading()) {
+                    @for (i of [1,2,3,4,5]; track i) { <tr><td colspan="5"><div class="skeleton"></div></td></tr> }
+                  }
                   @for (m of movements(); track m.id) {
                     <tr>
                       <td>{{ m.createdAt | date: 'dd MMM, HH:mm' }}</td><td>{{ m.productName }}</td><td>{{ m.movementType | words }}</td>
@@ -109,9 +121,14 @@ interface Movement { id: string; productName: string; movementType: string; quan
                       <td class="muted">{{ m.reason }}</td>
                     </tr>
                   }
+                  @if (!movementsLoading() && movements().length === 0) {
+                    <tr><td colspan="5"><div class="empty">No stock movements found.</div></td></tr>
+                  }
                 </tbody>
               </table>
             </div>
+            <mat-paginator [length]="movementTotal()" [pageSize]="movementPageSize" [pageIndex]="movementPage() - 1"
+              [pageSizeOptions]="[25, 50, 100]" [disabled]="movementsLoading()" (page)="onMovementPage($event)" />
           </div>
         </mat-tab>
       }
@@ -131,7 +148,18 @@ export class StockPage {
   batches = signal<StockBatch[]>([]);
   alerts = signal<StockAlerts | null>(null);
   movements = signal<Movement[]>([]);
+  batchTotal = signal(0);
+  batchPage = signal(1);
+  batchPageSize = 25;
+  batchesLoading = signal(false);
+  movementTotal = signal(0);
+  movementPage = signal(1);
+  movementPageSize = 25;
+  movementsLoading = signal(false);
   search = signal('');
+  private activeTabIndex = 0;
+  private batchRequestId = 0;
+  private movementRequestId = 0;
   private settings = inject(SettingsService);
   expiryDays = computed(() => Number(this.settings.get('ExpiryAlertDays', '30')) || 30);
 
@@ -144,11 +172,10 @@ export class StockPage {
   async load() {
     try {
       if (this.net.online()) {
-        const [summary, batches, alerts] = await Promise.all([
-          this.api.get<StockSummary[]>('/stock'), this.api.get<StockBatch[]>('/stock/batches'), this.api.get<StockAlerts>('/stock/alerts'),
+        const [summary, alerts] = await Promise.all([
+          this.api.get<StockSummary[]>('/stock'), this.api.get<StockAlerts>('/stock/alerts'),
         ]);
-        this.summary.set(summary); this.batches.set(batches); this.alerts.set(alerts);
-        if (this.auth.isManager) this.movements.set(await this.api.get<Movement[]>('/stock/movements', { take: 200 }));
+        this.summary.set(summary); this.alerts.set(alerts);
       } else {
         // Offline: product cache already includes stock changes made on this device.
         const products = await db.products.orderBy('name').toArray();
@@ -162,9 +189,61 @@ export class StockPage {
     } catch (e) { this.notify.error(e); }
   }
 
+  onTab(index: number) {
+    this.activeTabIndex = index;
+    if (index === 1 && this.net.online()) void this.loadBatches();
+    if (index === 2 && this.net.online() && this.auth.isManager) void this.loadMovements();
+  }
+
+  async loadBatches() {
+    const requestId = ++this.batchRequestId;
+    this.batchesLoading.set(true);
+    try {
+      const res = await this.api.get<{ items: StockBatch[]; total: number }>('/stock/batches/paged', {
+        page: this.batchPage(), pageSize: this.batchPageSize,
+      });
+      if (requestId === this.batchRequestId) {
+        this.batches.set(res.items);
+        this.batchTotal.set(res.total);
+      }
+    } catch (e) { if (requestId === this.batchRequestId) this.notify.error(e); }
+    finally { if (requestId === this.batchRequestId) this.batchesLoading.set(false); }
+  }
+
+  onBatchPage(e: PageEvent) {
+    this.batchPageSize = e.pageSize;
+    this.batchPage.set(e.pageIndex + 1);
+    void this.loadBatches();
+  }
+
+  async loadMovements() {
+    const requestId = ++this.movementRequestId;
+    this.movementsLoading.set(true);
+    try {
+      const res = await this.api.get<{ items: Movement[]; total: number }>('/stock/movements/paged', {
+        page: this.movementPage(), pageSize: this.movementPageSize,
+      });
+      if (requestId === this.movementRequestId) {
+        this.movements.set(res.items);
+        this.movementTotal.set(res.total);
+      }
+    } catch (e) { if (requestId === this.movementRequestId) this.notify.error(e); }
+    finally { if (requestId === this.movementRequestId) this.movementsLoading.set(false); }
+  }
+
+  onMovementPage(e: PageEvent) {
+    this.movementPageSize = e.pageSize;
+    this.movementPage.set(e.pageIndex + 1);
+    void this.loadMovements();
+  }
+
   async adjust() {
     const ok = await firstValueFrom(this.dialog.open(AdjustStockDialog, { width: '520px', data: this.summary() }).afterClosed());
-    if (ok) await this.load();
+    if (ok) {
+      await this.load();
+      if (this.activeTabIndex === 1 && this.net.online()) void this.loadBatches();
+      if (this.activeTabIndex === 2 && this.net.online() && this.auth.isManager) void this.loadMovements();
+    }
   }
 
   export(kind: 'xlsx' | 'pdf') {

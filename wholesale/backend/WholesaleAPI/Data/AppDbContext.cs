@@ -34,7 +34,6 @@ public class AppDbContext : DbContext
         b.Properties<decimal>().HavePrecision(18, 2);
         b.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
         b.Properties<UserRole>().HaveConversion<string>().HaveMaxLength(20);
-        b.Properties<Brand>().HaveConversion<string>().HaveMaxLength(20);
         b.Properties<UnitType>().HaveConversion<string>().HaveMaxLength(20);
         b.Properties<CustomerType>().HaveConversion<string>().HaveMaxLength(20);
         b.Properties<PaymentStatus>().HaveConversion<string>().HaveMaxLength(20);
@@ -72,6 +71,7 @@ public class AppDbContext : DbContext
         mb.Entity<Product>(e =>
         {
             e.Property(x => x.Name).HasMaxLength(150);
+            e.Property(x => x.Brand).HasMaxLength(20);
             e.HasIndex(x => x.Barcode);
             e.HasIndex(x => x.Sku);
         });

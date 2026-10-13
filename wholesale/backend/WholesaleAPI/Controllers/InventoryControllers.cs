@@ -16,8 +16,12 @@ public class ProductsController : ControllerBase
     public ProductsController(ProductService products) => _products = products;
 
     [HttpGet]
-    public Task<List<ProductDto>> List(string? search, bool includeInactive = false, Brand? brand = null)
+    public Task<List<ProductDto>> List(string? search, bool includeInactive = false, string? brand = null)
         => _products.ListAsync(search, includeInactive, brand);
+
+    [HttpGet("paged")]
+    public Task<PagedResult<ProductDto>> ListPaged(string? search, bool includeInactive = false, string? brand = null, int page = 1, int pageSize = 25)
+        => _products.ListPagedAsync(search, includeInactive, brand, Math.Max(1, page), Math.Clamp(pageSize, 1, 100));
 
     [HttpGet("{id:guid}")] public Task<ProductDto> Get(Guid id) => _products.GetAsync(id);
 
@@ -56,11 +60,19 @@ public class StockController : ControllerBase
     [HttpGet("batches")]
     public Task<List<StockBatchDto>> Batches(Guid? productId, bool includeEmpty = false) => _stock.GetBatchesAsync(productId, includeEmpty);
 
+    [HttpGet("batches/paged")]
+    public Task<PagedResult<StockBatchDto>> BatchesPaged(Guid? productId, bool includeEmpty = false, int page = 1, int pageSize = 25)
+        => _stock.GetBatchesPageAsync(productId, includeEmpty, Math.Max(1, page), Math.Clamp(pageSize, 1, 100));
+
     [HttpGet("alerts")] public Task<StockAlertsDto> Alerts() => _stock.GetAlertsAsync();
 
     [HttpGet("movements"), Authorize(Roles = RoleGroups.ManagerUp)]
     public Task<List<object>> Movements(Guid? productId, DateTime? from, DateTime? to, int take = 200)
         => _stock.GetMovementsAsync(productId, from, to, Math.Clamp(take, 1, 1000));
+
+    [HttpGet("movements/paged"), Authorize(Roles = RoleGroups.ManagerUp)]
+    public Task<PagedResult<object>> MovementsPaged(Guid? productId, DateTime? from, DateTime? to, int page = 1, int pageSize = 25)
+        => _stock.GetMovementsPageAsync(productId, from, to, Math.Max(1, page), Math.Clamp(pageSize, 1, 100));
 
     [HttpPost("adjust"), Authorize(Roles = RoleGroups.ManagerUp)]
     public Task<StockBatchDto> Adjust(StockAdjustmentRequest req) => _stock.AdjustAsync(req);
@@ -82,6 +94,9 @@ public class PurchasesController : ControllerBase
     public Task<PurchaseDto> Get(Guid id) => _purchases.GetAsync(id);
 
     [HttpPost] public Task<PurchaseDto> Create(CreatePurchaseRequest req) => _purchases.CreateAsync(req);
+
+    [HttpPut("{id:guid}")]
+    public Task<PurchaseDto> Update(Guid id, UpdatePurchaseRequest req) => _purchases.UpdateAsync(id, req);
 
     [HttpPost("{id:guid}/payments")]
     public Task<PurchaseDto> Pay(Guid id, PurchasePaymentRequest req) => _purchases.AddPaymentAsync(id, req);

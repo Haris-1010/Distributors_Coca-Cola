@@ -1,7 +1,7 @@
 // Mirrors the API DTOs. Enums travel as strings.
 
 export type UserRole = 'SuperAdmin' | 'Admin' | 'Manager' | 'Salesman' | 'Viewer';
-export type Brand = 'Pepsi' | 'CocaCola' | 'Other';
+export type Brand = string;
 export type UnitType = 'Bottle' | 'Can' | 'PET' | 'Glass';
 export type CustomerType = 'Retailer' | 'Restaurant' | 'Shop' | 'Other';
 export type PaymentStatus = 'Unpaid' | 'Partial' | 'Paid';
@@ -10,9 +10,6 @@ export type ReturnReason = 'Damaged' | 'Extra' | 'Unsold' | 'Expired' | 'Other';
 export type CrateTransactionType = 'Issued' | 'Returned' | 'Adjustment';
 
 export const ROLES: UserRole[] = ['SuperAdmin', 'Admin', 'Manager', 'Salesman', 'Viewer'];
-export const BRANDS: { value: Brand; label: string }[] = [
-  { value: 'Pepsi', label: 'Pepsi' }, { value: 'CocaCola', label: 'Coca-Cola' }, { value: 'Other', label: 'Other' },
-];
 export const UNIT_TYPES: UnitType[] = ['Glass', 'PET', 'Can', 'Bottle'];
 export const CUSTOMER_TYPES: CustomerType[] = ['Retailer', 'Shop', 'Restaurant', 'Other'];
 export const PAYMENT_MODES: { value: PaymentMode; label: string }[] = [
@@ -56,7 +53,7 @@ export interface StockBatch {
   location: string; lastUpdated: string; daysToExpiry?: number | null;
 }
 
-export interface StockAlerts { lowStock: StockSummary[]; nearExpiry: StockBatch[]; expired: StockBatch[]; }
+export interface StockAlerts { lowStockCount: number; nearExpiryCount: number; expiredCount: number; }
 
 export interface PurchaseItem {
   id?: string; productId: string; productName?: string; quantity: number; unitPrice: number; total?: number;
@@ -143,6 +140,10 @@ export interface CreateSaleRequest {
 export interface CreatePurchaseRequest {
   id: string; invoiceNumber?: string | null; distributorName: string; purchaseDate?: string | null;
   paidAmount: number; notes?: string | null; items: PurchaseItem[];
+}
+export interface UpdatePurchaseRequest {
+  invoiceNumber: string; distributorName: string; purchaseDate: string;
+  notes?: string | null; items: PurchaseItem[];
 }
 export interface CreateReturnRequest {
   id: string; saleId: string; lines: { saleItemId: string; quantity: number; reason: ReturnReason }[];

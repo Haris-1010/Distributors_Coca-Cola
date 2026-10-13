@@ -64,7 +64,7 @@ public static class DbSeeder
     {
         // Sample catalogue for a Pakistani Pepsi / Coca-Cola wholesaler.
         // Prices are placeholders per piece — edit them to match your distributor's rate list.
-        Product P(string name, Brand brand, string category, UnitType unit, bool crate, int perCrate,
+        Product P(string name, string brand, string category, UnitType unit, bool crate, int perCrate,
                   decimal cost, string sku, string pack) => new()
         {
             Name = name, Brand = brand, Category = category, UnitType = unit,
@@ -75,18 +75,18 @@ public static class DbSeeder
 
         var products = new List<Product>
         {
-            P("Coca-Cola 250ml Glass", Brand.CocaCola, "Soft Drink", UnitType.Glass, true, 24, 55, "CC-250-G", "24 bottles / crate"),
-            P("Coca-Cola 300ml Glass", Brand.CocaCola, "Soft Drink", UnitType.Glass, true, 24, 65, "CC-300-G", "24 bottles / crate"),
-            P("Sprite 250ml Glass", Brand.CocaCola, "Soft Drink", UnitType.Glass, true, 24, 55, "SP-250-G", "24 bottles / crate"),
-            P("Fanta 250ml Glass", Brand.CocaCola, "Soft Drink", UnitType.Glass, true, 24, 55, "FA-250-G", "24 bottles / crate"),
-            P("Pepsi 250ml Glass", Brand.Pepsi, "Soft Drink", UnitType.Glass, true, 24, 55, "PE-250-G", "24 bottles / crate"),
-            P("7Up 250ml Glass", Brand.Pepsi, "Soft Drink", UnitType.Glass, true, 24, 55, "7U-250-G", "24 bottles / crate"),
-            P("Mirinda 250ml Glass", Brand.Pepsi, "Soft Drink", UnitType.Glass, true, 24, 55, "MI-250-G", "24 bottles / crate"),
-            P("Pepsi 1.5L PET", Brand.Pepsi, "Soft Drink", UnitType.PET, false, 6, 190, "PE-1500-P", "6 bottles / pack"),
-            P("Coca-Cola 1.5L PET", Brand.CocaCola, "Soft Drink", UnitType.PET, false, 6, 190, "CC-1500-P", "6 bottles / pack"),
-            P("Sting 500ml PET", Brand.Pepsi, "Energy Drink", UnitType.PET, false, 12, 95, "ST-500-P", "12 bottles / pack"),
-            P("Aquafina 1.5L Water", Brand.Pepsi, "Water", UnitType.PET, false, 6, 80, "AQ-1500-P", "6 bottles / pack"),
-            P("Kinley 1.5L Water", Brand.CocaCola, "Water", UnitType.PET, false, 6, 80, "KI-1500-P", "6 bottles / pack"),
+            P("Coca-Cola 250ml Glass", "CocaCola", "Soft Drink", UnitType.Glass, true, 24, 55, "CC-250-G", "24 bottles / crate"),
+            P("Coca-Cola 300ml Glass", "CocaCola", "Soft Drink", UnitType.Glass, true, 24, 65, "CC-300-G", "24 bottles / crate"),
+            P("Sprite 250ml Glass", "CocaCola", "Soft Drink", UnitType.Glass, true, 24, 55, "SP-250-G", "24 bottles / crate"),
+            P("Fanta 250ml Glass", "CocaCola", "Soft Drink", UnitType.Glass, true, 24, 55, "FA-250-G", "24 bottles / crate"),
+            P("Pepsi 250ml Glass", "Pepsi", "Soft Drink", UnitType.Glass, true, 24, 55, "PE-250-G", "24 bottles / crate"),
+            P("7Up 250ml Glass", "Pepsi", "Soft Drink", UnitType.Glass, true, 24, 55, "7U-250-G", "24 bottles / crate"),
+            P("Mirinda 250ml Glass", "Pepsi", "Soft Drink", UnitType.Glass, true, 24, 55, "MI-250-G", "24 bottles / crate"),
+            P("Pepsi 1.5L PET", "Pepsi", "Soft Drink", UnitType.PET, false, 6, 190, "PE-1500-P", "6 bottles / pack"),
+            P("Coca-Cola 1.5L PET", "CocaCola", "Soft Drink", UnitType.PET, false, 6, 190, "CC-1500-P", "6 bottles / pack"),
+            P("Sting 500ml PET", "Pepsi", "Energy Drink", UnitType.PET, false, 12, 95, "ST-500-P", "12 bottles / pack"),
+            P("Aquafina 1.5L Water", "Pepsi", "Water", UnitType.PET, false, 6, 80, "AQ-1500-P", "6 bottles / pack"),
+            P("Kinley 1.5L Water", "CocaCola", "Water", UnitType.PET, false, 6, 80, "KI-1500-P", "6 bottles / pack"),
         };
         db.Products.AddRange(products);
 
@@ -107,7 +107,7 @@ public static class DbSeeder
             Notes = "Opening stock (sample data)",
         };
         var expiry = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(6));
-        foreach (var p in products.Where(p => p.Brand == Brand.Pepsi))
+        foreach (var p in products.Where(p => p.Brand == "Pepsi"))
         {
             var qty = p.BottlesPerCrate * 10;
             var item = new PurchaseItem

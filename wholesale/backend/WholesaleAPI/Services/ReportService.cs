@@ -49,6 +49,7 @@ public class ReportService
         var trend = await _repo.SalesByPeriodAsync(today.AddDays(-29), today, tz, "day");
         var top = await _repo.TopProductsAsync(monthStart, today, tz, 5);
         var alerts = await _stock.GetAlertsAsync();
+        var lowStock = await _stock.GetSummaryAsync(onlyLow: true);
         var crateDebtors = (await _crates.SummaryAsync(onlyPending: true)).Take(5).ToList();
         return new
         {
@@ -56,9 +57,9 @@ public class ReportService
             totals,
             salesTrend = Camel(trend),
             topProducts = Camel(top),
-            lowStock = alerts.LowStock,
-            nearExpiryCount = alerts.NearExpiry.Count,
-            expiredCount = alerts.Expired.Count,
+            lowStock,
+            nearExpiryCount = alerts.NearExpiryCount,
+            expiredCount = alerts.ExpiredCount,
             topCrateDebtors = crateDebtors,
         };
     }
@@ -129,10 +130,10 @@ public class ReportService
                 pieces = summary.Sum(s => s.Quantity),
                 crates = summary.Sum(s => s.CrateQuantity),
                 value = summary.Sum(s => s.StockValue),
-                lowStock = alerts.LowStock.Count,
+                lowStock = alerts.LowStockCount,
             },
-            alerts.NearExpiry,
-            alerts.Expired,
+            nearExpiryCount = alerts.NearExpiryCount,
+            expiredCount = alerts.ExpiredCount,
         };
     }
 

@@ -2,8 +2,6 @@ namespace WholesaleAPI.Models;
 
 public enum UserRole { SuperAdmin, Admin, Manager, Salesman, Viewer }
 
-public enum Brand { Pepsi, CocaCola, Other }
-
 public enum UnitType { Bottle, Can, PET, Glass }
 
 public enum CustomerType { Retailer, Restaurant, Shop, Other }

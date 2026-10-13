@@ -5,6 +5,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
@@ -21,7 +22,7 @@ interface Line { item: SaleItem; qty: number; reason: ReturnReason; }
 
 @Component({
   selector: 'app-returns',
-  imports: [FormsModule, DatePipe, RouterLink, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatAutocompleteModule, DateRangeComponent, MoneyPipe],
+  imports: [FormsModule, DatePipe, RouterLink, MatFormFieldModule, MatInputModule, MatSelectModule, MatButtonModule, MatAutocompleteModule, MatPaginatorModule, DateRangeComponent, MoneyPipe],
   template: `
   <div class="page">
     <div class="page-head">
@@ -89,11 +90,14 @@ interface Line { item: SaleItem; qty: number; reason: ReturnReason; }
       <div class="card-title">Recent returns</div>
       @if (!net.online()) { <p class="muted">Return history needs the server. Returns made offline are listed under Sync status until they upload.</p> }
       @else {
-        <div class="filters"><app-date-range (changed)="range.set($event); loadList()" /></div>
+        <div class="filters"><app-date-range (changed)="range.set($event); listPage.set(1); loadList()" /></div>
         <div class="table-wrap">
           <table class="data">
             <thead><tr><th>Date</th><th>Invoice</th><th>Customer</th><th>Product</th><th class="right">Qty</th><th>Reason</th><th class="right">Value</th></tr></thead>
             <tbody>
+              @if (listLoading()) {
+                @for (i of [1,2,3,4,5]; track i) { <tr><td colspan="7"><div class="skeleton"></div></td></tr> }
+              }
               @for (r of list(); track r.id) {
                 <tr>
                   <td>{{ r.returnDate | date: 'dd MMM, HH:mm' }}</td>
@@ -103,10 +107,14 @@ interface Line { item: SaleItem; qty: number; reason: ReturnReason; }
                   <td>{{ r.reason }} @if (!r.stockAdjusted) { <span class="chip red">written off</span> }</td>
                   <td class="right money">{{ r.returnValue | money }}</td>
                 </tr>
-              } @empty { <tr><td colspan="7"><div class="empty">No returns in this range.</div></td></tr> }
+              } @empty {
+                @if (!listLoading()) { <tr><td colspan="7"><div class="empty">No returns in this range.</div></td></tr> }
+              }
             </tbody>
           </table>
         </div>
+        <mat-paginator [length]="listTotal()" [pageSize]="listPageSize" [pageIndex]="listPage() - 1"
+          [pageSizeOptions]="[25, 50, 100]" [disabled]="listLoading()" (page)="onListPage($event)" />
       }
     </div>
   </div>
@@ -135,6 +143,11 @@ export class ReturnsPage {
   busy = signal(false);
   range = signal<Range | null>(null);
   list = signal<SaleReturn[]>([]);
+  listTotal = signal(0);
+  listPage = signal(1);
+  listPageSize = 25;
+  listLoading = signal(false);
+  private listRequestId = 0;
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   totalValue = computed(() => this.lines().reduce((s, l) => s + l.qty * l.item.unitPrice, 0));
@@ -204,11 +217,24 @@ export class ReturnsPage {
   async loadList() {
     const r = this.range();
     if (!r || !this.net.online()) return;
+    const requestId = ++this.listRequestId;
+    this.listLoading.set(true);
     try {
       const res = await this.api.get<Paged<SaleReturn>>('/returns', {
-        from: dayStartUtc(r.from), to: dayStartUtc(addDays(new Date(r.to + 'T00:00:00'), 1)), pageSize: 200,
+        from: dayStartUtc(r.from), to: dayStartUtc(addDays(new Date(r.to + 'T00:00:00'), 1)),
+        page: this.listPage(), pageSize: this.listPageSize,
       });
-      this.list.set(res.items);
-    } catch (e) { this.notify.error(e); }
+      if (requestId === this.listRequestId) {
+        this.list.set(res.items);
+        this.listTotal.set(res.total);
+      }
+    } catch (e) { if (requestId === this.listRequestId) this.notify.error(e); }
+    finally { if (requestId === this.listRequestId) this.listLoading.set(false); }
+  }
+
+  onListPage(e: PageEvent) {
+    this.listPageSize = e.pageSize;
+    this.listPage.set(e.pageIndex + 1);
+    void this.loadList();
   }
 }

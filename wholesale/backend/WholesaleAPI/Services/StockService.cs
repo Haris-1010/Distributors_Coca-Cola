@@ -41,13 +41,21 @@ public class StockService
             .Where(p => p.IsActive && (search == null || EF.Functions.ILike(p.Name, $"%{search}%")))
             .OrderBy(p => p.Name).ToListAsync();
 
-        var batches = await _db.StockBatches.AsNoTracking().Where(b => b.Quantity > 0).ToListAsync();
-        var byProduct = batches.GroupBy(b => b.ProductId).ToDictionary(g => g.Key, g => g.ToList());
+        var batchStats = await _db.StockBatches.AsNoTracking().Where(b => b.Quantity > 0)
+            .GroupBy(b => b.ProductId)
+            .Select(g => new
+            {
+                ProductId = g.Key,
+                Quantity = g.Sum(b => b.Quantity),
+                StockValue = g.Sum(b => b.Quantity * b.PurchasePriceAtTime),
+                NearestExpiry = g.Where(b => b.ExpiryDate.HasValue).Min(b => b.ExpiryDate),
+                BatchCount = g.Count(),
+            }).ToDictionaryAsync(x => x.ProductId);
 
         var result = products.Select(p =>
         {
-            var list = byProduct.GetValueOrDefault(p.Id) ?? new List<StockBatch>();
-            var qty = list.Sum(b => b.Quantity);
+            var stats = batchStats.GetValueOrDefault(p.Id);
+            var qty = stats?.Quantity ?? 0;
             var per = Math.Max(1, p.BottlesPerCrate);
             return new StockSummaryDto
             {
@@ -59,11 +67,11 @@ public class StockService
                 Quantity = qty,
                 CrateQuantity = qty / per,
                 LoosePieces = qty % per,
-                StockValue = Money.R(list.Sum(b => b.Quantity * b.PurchasePriceAtTime)),
+                StockValue = Money.R(stats?.StockValue ?? 0),
                 LowStockThreshold = p.LowStockThreshold,
                 IsLowStock = qty <= p.LowStockThreshold,
-                NearestExpiry = list.Where(b => b.ExpiryDate.HasValue).Select(b => b.ExpiryDate).Min(),
-                BatchCount = list.Count,
+                NearestExpiry = stats?.NearestExpiry,
+                BatchCount = stats?.BatchCount ?? 0,
             };
         }).ToList();
 
@@ -79,17 +87,30 @@ public class StockService
         return _mapper.Map<List<StockBatchDto>>(list);
     }
 
+    public async Task<PagedResult<StockBatchDto>> GetBatchesPageAsync(Guid? productId, bool includeEmpty, int page, int pageSize)
+    {
+        var q = _db.StockBatches.AsNoTracking().AsQueryable();
+        if (productId.HasValue) q = q.Where(b => b.ProductId == productId);
+        if (!includeEmpty) q = q.Where(b => b.Quantity > 0);
+
+        var total = await q.CountAsync();
+        var rows = await q.OrderBy(b => b.Product!.Name).ThenBy(b => b.ExpiryDate).ThenBy(b => b.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize).Include(b => b.Product).ToListAsync();
+        return new PagedResult<StockBatchDto>(_mapper.Map<List<StockBatchDto>>(rows), total, page, pageSize);
+    }
+
     public async Task<StockAlertsDto> GetAlertsAsync()
     {
         var days = await _settings.GetIntAsync(SettingKeys.ExpiryAlertDays, 30);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var batches = await GetBatchesAsync(null, includeEmpty: false);
+        var expiringBatches = _db.StockBatches.AsNoTracking().Where(b => b.Quantity > 0 && b.ExpiryDate.HasValue);
+        var expiredCount = await expiringBatches.CountAsync(b => b.ExpiryDate < today);
+        var nearExpiryCount = await expiringBatches.CountAsync(b => b.ExpiryDate >= today && b.ExpiryDate <= today.AddDays(days));
         return new StockAlertsDto
         {
-            LowStock = await GetSummaryAsync(onlyLow: true),
-            Expired = batches.Where(b => b.ExpiryDate < today).ToList(),
-            NearExpiry = batches.Where(b => b.ExpiryDate >= today && b.ExpiryDate <= today.AddDays(days))
-                .OrderBy(b => b.ExpiryDate).ToList(),
+            LowStockCount = (await GetSummaryAsync(onlyLow: true)).Count,
+            ExpiredCount = expiredCount,
+            NearExpiryCount = nearExpiryCount,
         };
     }
 
@@ -106,6 +127,24 @@ public class StockService
                 m.Quantity, m.ReferenceId, m.Reason, m.CreatedAt,
             }).ToListAsync();
         return rows.Cast<object>().ToList();
+    }
+
+    public async Task<PagedResult<object>> GetMovementsPageAsync(Guid? productId, DateTime? from, DateTime? to, int page, int pageSize)
+    {
+        var q = _db.StockMovements.AsNoTracking().AsQueryable();
+        if (productId.HasValue) q = q.Where(m => m.ProductId == productId);
+        if (from.HasValue) q = q.Where(m => m.CreatedAt >= from);
+        if (to.HasValue) q = q.Where(m => m.CreatedAt < to);
+
+        var total = await q.CountAsync();
+        var rows = await q.OrderByDescending(m => m.CreatedAt).ThenByDescending(m => m.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Join(_db.Products, m => m.ProductId, p => p.Id, (m, p) => new
+            {
+                m.Id, m.ProductId, ProductName = p.Name, m.StockBatchId, m.MovementType,
+                m.Quantity, m.ReferenceId, m.Reason, m.CreatedAt,
+            }).ToListAsync();
+        return new PagedResult<object>(rows.Cast<object>().ToList(), total, page, pageSize);
     }
 
     /// <summary>Manual stock correction. Positive quantity adds stock, negative removes from a chosen batch.</summary>
@@ -218,6 +257,22 @@ public class StockService
         return allocations;
     }
 
+    public async Task RestoreForSaleEditAsync(Guid saleId, List<SaleItemAllocation> allocations, Guid productId)
+    {
+        foreach (var allocation in allocations)
+        {
+            var batch = await LockBatchAsync(allocation.StockBatchId);
+            batch.Quantity += allocation.Quantity;
+            batch.LastUpdated = DateTime.UtcNow;
+            _db.StockMovements.Add(new StockMovement
+            {
+                ProductId = productId, StockBatchId = batch.Id, MovementType = StockMovementType.AdjustmentIn,
+                Quantity = allocation.Quantity, ReferenceId = saleId, Reason = "Restored while editing sale",
+                CreatedByUserId = _user.Id,
+            });
+        }
+    }
+
     /// <summary>Puts returned pieces back into the batches they came from (latest allocation first).</summary>
     public async Task RestoreAsync(Guid productId, List<SaleItemAllocation> allocations, int qty, Guid returnId, string reason)
     {
@@ -264,5 +319,14 @@ public class StockService
             .IgnoreQueryFilters()
             .ToListAsync();
         return rows.FirstOrDefault() ?? throw AppException.NotFound("Stock batch");
+    }
+
+    public async Task<StockBatch> LockPurchaseBatchAsync(Guid purchaseItemId)
+    {
+        var rows = await _db.StockBatches
+            .FromSqlInterpolated($"SELECT * FROM stock_batches WHERE purchase_item_id = {purchaseItemId} FOR UPDATE")
+            .IgnoreQueryFilters()
+            .ToListAsync();
+        return rows.FirstOrDefault() ?? throw AppException.NotFound("Purchase stock batch");
     }
 }

@@ -62,7 +62,7 @@ public class SaveProductValidator : AbstractValidator<SaveProductRequest>
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(150);
         RuleFor(x => x.Category).NotEmpty().MaximumLength(60);
-        RuleFor(x => x.Brand).IsInEnum();
+        RuleFor(x => x.Brand).NotEmpty().MaximumLength(20);
         RuleFor(x => x.UnitType).IsInEnum();
         RuleFor(x => x.BottlesPerCrate).GreaterThan(0).LessThanOrEqualTo(100);
         RuleFor(x => x.PurchasePrice).GreaterThanOrEqualTo(0);
@@ -92,6 +92,23 @@ public class CreatePurchaseValidator : AbstractValidator<CreatePurchaseRequest>
     {
         RuleFor(x => x.DistributorName).NotEmpty().MaximumLength(150);
         RuleFor(x => x.PaidAmount).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.Items).NotEmpty().WithMessage("Add at least one product.");
+        RuleForEach(x => x.Items).ChildRules(i =>
+        {
+            i.RuleFor(x => x.ProductId).NotEmpty();
+            i.RuleFor(x => x.Quantity).GreaterThan(0);
+            i.RuleFor(x => x.UnitPrice).GreaterThanOrEqualTo(0);
+        });
+    }
+}
+
+public class UpdatePurchaseValidator : AbstractValidator<UpdatePurchaseRequest>
+{
+    public UpdatePurchaseValidator()
+    {
+        RuleFor(x => x.InvoiceNumber).NotEmpty().MaximumLength(80);
+        RuleFor(x => x.DistributorName).NotEmpty().MaximumLength(150);
+        RuleFor(x => x.PurchaseDate).NotEmpty();
         RuleFor(x => x.Items).NotEmpty().WithMessage("Add at least one product.");
         RuleForEach(x => x.Items).ChildRules(i =>
         {
