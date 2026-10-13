@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: wholesale
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  api:
+    build: ./backend/WholesaleAPI
+    restart: unless-stopped
+    depends_on: [db]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Default: "Host=db;Database=wholesale;Username=postgres;Password=${DB_PASSWORD:-postgres}"
+      Jwt__Key: ${JWT_KEY:?Set JWT_KEY to a long random secret in .env}
+      EnableSwagger: "true"
+      Cors__Origins__0: "http://localhost:4200"
+    ports:
+      - "5080:8080"
+
+volumes:
+  pgdata:

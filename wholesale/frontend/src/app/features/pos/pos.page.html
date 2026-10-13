@@ -1,0 +1,186 @@
+<div class="pos-layout">
+  <!-- ============ Products ============ -->
+  <section class="catalog">
+    <div class="search-row">
+      <div class="search">
+        <span class="material-symbols-outlined">search</span>
+        <input #searchBox [ngModel]="search()" (ngModelChange)="search.set($event)" (keydown.enter)="onSearchEnter()"
+               placeholder="Search product or scan barcode  ( / )" autofocus autocomplete="off" aria-label="Search products">
+        @if (search()) { <button class="clear" (click)="search.set('')" aria-label="Clear search"><span class="material-symbols-outlined">close</span></button> }
+      </div>
+      <mat-button-toggle-group [value]="brand()" (change)="brand.set($event.value)" hideSingleSelectionIndicator aria-label="Brand">
+        <mat-button-toggle value="All">All</mat-button-toggle>
+        <mat-button-toggle value="Pepsi">Pepsi</mat-button-toggle>
+        <mat-button-toggle value="CocaCola">Coca-Cola</mat-button-toggle>
+        <mat-button-toggle value="Other">Other</mat-button-toggle>
+      </mat-button-toggle-group>
+    </div>
+    <p class="tip muted small">Tap a product to add a full crate / pack · Shift-tap adds one piece · <b>F9</b> completes the sale</p>
+
+    @if (loading()) {
+      <div class="tiles">@for (i of [1,2,3,4,5,6,7,8]; track i) { <div class="tile"><div class="skeleton" style="width:70%"></div><div class="skeleton" style="width:40%;margin-top:10px"></div></div> }</div>
+    } @else {
+      <div class="tiles">
+        @for (p of filteredProducts(); track p.id) {
+          <button class="tile" [class.brand-pepsi]="p.brand === 'Pepsi'" [class.brand-coke]="p.brand === 'CocaCola'"
+                  [class.out]="available(p) <= 0" [class.in-cart]="inCart().has(p.id)"
+                  (click)="add(p, $any($event).shiftKey ? 1 : undefined)">
+            <div class="t-top">
+              <span class="t-brand">{{ p.brand | brand }}</span>
+              @if (p.isCrateRequired) { <span class="t-glass" matTooltip="Glass — empty crate must come back">crate</span> }
+            </div>
+            <div class="t-name">{{ p.name }}</div>
+            <div class="t-bottom">
+              <span class="money">{{ p.sellingPrice | money }}</span>
+              <span class="t-stock" [class.low]="available(p) <= p.lowStockThreshold">{{ available(p) | crates: p.bottlesPerCrate }}</span>
+            </div>
+            @if (inCart().get(p.id); as q) { <span class="t-qty">{{ q | crates: p.bottlesPerCrate }}</span> }
+          </button>
+        } @empty {
+          <div class="empty"><span class="material-symbols-outlined">search_off</span>No products match “{{ search() }}”.</div>
+        }
+      </div>
+    }
+  </section>
+
+  <!-- ============ Cart ============ -->
+  <aside class="cart">
+    <!-- Customer -->
+    <div class="block customer">
+      @if (customer(); as c) {
+        <div class="cust">
+          <div class="cust-main">
+            <div class="cust-name">{{ c.businessName || c.name }}</div>
+            <div class="small muted">{{ c.businessName ? c.name + ' · ' : '' }}{{ c.phone }}</div>
+          </div>
+          <button mat-icon-button (click)="clearCustomer()" aria-label="Change customer"><mat-icon class="material-symbols-outlined">close</mat-icon></button>
+        </div>
+        <div class="cust-flags">
+          <span class="chip" [class.red]="c.outstandingBalance > 0" [class.green]="c.outstandingBalance <= 0">
+            {{ c.outstandingBalance > 0 ? 'Owes ' : 'Balance ' }}{{ c.outstandingBalance | money }}
+          </span>
+          <span class="chip" [class.red]="c.emptyCrateBalance > 0">
+            <span class="material-symbols-outlined">inventory_2</span>{{ c.emptyCrateBalance }} crates owed
+          </span>
+        </div>
+      } @else {
+        <div class="row nowrap">
+          <mat-form-field class="grow">
+            <mat-label>Customer</mat-label>
+            <span matPrefix class="material-symbols-outlined pfx">storefront</span>
+            <input matInput [ngModel]="customerQuery()" (ngModelChange)="customerQuery.set($event)" [matAutocomplete]="auto" placeholder="Search name, shop or phone">
+            <mat-autocomplete #auto="matAutocomplete" [displayWith]="customerLabel" (optionSelected)="pickCustomer($event.option.value)">
+              @for (c of filteredCustomers(); track c.id) {
+                <mat-option [value]="c">
+                  <div class="opt">
+                    <span>{{ c.businessName || c.name }} <small class="muted">{{ c.businessName ? c.name : '' }}</small></span>
+                    @if (c.emptyCrateBalance > 0) { <span class="chip red">{{ c.emptyCrateBalance }} cr</span> }
+                  </div>
+                </mat-option>
+              }
+            </mat-autocomplete>
+          </mat-form-field>
+          <button mat-stroked-button (click)="quickAddCustomer()" matTooltip="Add a new customer"><mat-icon class="material-symbols-outlined">person_add</mat-icon> New</button>
+        </div>
+      }
+    </div>
+
+    <!-- Lines -->
+    <div class="lines">
+      @for (l of cart(); track l.key) {
+        <div class="line" [class.warn]="l.unitPrice < minPrice(l.product)">
+          <div class="l-head">
+            <span class="l-name">{{ l.product.name }}</span>
+            <button class="icon-btn" (click)="remove(l)" aria-label="Remove line"><span class="material-symbols-outlined">delete</span></button>
+          </div>
+          <div class="l-controls">
+            <div class="qty">
+              <button class="icon-btn" (click)="changeQty(l, -l.product.bottlesPerCrate)" matTooltip="− 1 crate/pack">−{{ l.product.bottlesPerCrate }}</button>
+              <button class="icon-btn" (click)="changeQty(l, -1)" aria-label="minus one">−</button>
+              <input type="number" min="1" [ngModel]="l.quantity" (ngModelChange)="setQty(l, $event)" aria-label="Quantity in pieces">
+              <button class="icon-btn" (click)="changeQty(l, 1)" aria-label="plus one">+</button>
+              <button class="icon-btn" (click)="changeQty(l, l.product.bottlesPerCrate)" matTooltip="+ 1 crate/pack">+{{ l.product.bottlesPerCrate }}</button>
+            </div>
+            <span class="x">×</span>
+            <input class="price" type="number" step="0.5" [ngModel]="l.unitPrice" (ngModelChange)="setPrice(l, $event)" aria-label="Unit price">
+            <span class="l-total money">{{ l.quantity * l.unitPrice | money }}</span>
+          </div>
+          <div class="l-meta small">
+            <span class="muted">{{ l.quantity | crates: l.product.bottlesPerCrate }}</span>
+            @if (l.quantity > stockLeft(l.product, l)) { <span class="neg">Only {{ stockLeft(l.product, l) }} in stock</span> }
+            @if (l.unitPrice < minPrice(l.product)) {
+              <span class="neg">Below min {{ minPrice(l.product) | money }}{{ isManager ? '' : ' — Manager needed' }}</span>
+            } @else if (isManager) {
+              <span class="pos">+{{ (l.unitPrice - l.product.purchasePrice) | money }}/pc</span>
+            }
+          </div>
+        </div>
+      } @empty {
+        <div class="empty"><span class="material-symbols-outlined">shopping_cart</span>No items yet — tap a product.</div>
+      }
+    </div>
+
+    <!-- Crates -->
+    @if (cratesRequired() > 0 || cratesOwedBefore() > 0) {
+      <div class="block crates" [class.alert]="cratesOwedAfter() > 0">
+        <div class="crates-head"><span class="material-symbols-outlined">inventory_2</span> Empty crates</div>
+        <div class="crates-grid">
+          <span>This sale needs</span><b class="num">{{ cratesRequired() }}</b>
+          <span class="muted small" style="grid-column: span 2">{{ glassBottles() }} glass bottles ÷ 24 per crate (rounded up)</span>
+          <span>Already owed</span><b class="num">{{ cratesOwedBefore() }}</b>
+          <span>Returned now</span>
+          <input type="number" min="0" class="crate-input" [ngModel]="cratesReturnedNow()" (ngModelChange)="cratesReturnedNow.set(+$event || 0)" aria-label="Empty crates returned now">
+          <span class="owe">Owed after this sale</span><b class="num owe">{{ cratesOwedAfter() }}</b>
+        </div>
+        @if (cratesOwedAfter() > 0) { <div class="small">Sale stays open until these crates come back.</div> }
+      </div>
+    }
+
+    <!-- Payment -->
+    <div class="block pay">
+      <div class="totals">
+        <span>Items</span><span class="num">{{ totalPieces() | int }} pcs</span>
+        <span>Subtotal</span><span class="money">{{ subtotal() | money }}</span>
+        @if (isManager) {
+          <span>Discount</span>
+          <input type="number" min="0" class="disc" [ngModel]="discount()" (ngModelChange)="discount.set(+$event || 0)" aria-label="Discount">
+        }
+        <span class="grand">Total</span><span class="grand money">{{ netAmount() | money }}</span>
+        @if (isManager) {
+          <span class="muted">Profit</span><span class="money" [class.pos]="profit() > 0" [class.neg]="profit() <= 0">{{ profit() | money }}</span>
+        }
+      </div>
+
+      <div class="modes">
+        @for (m of paymentModes; track m.value) {
+          <button class="mode" [class.on]="paymentMode() === m.value" (click)="setMode(m.value)">{{ m.value === 'Credit' ? 'Credit' : m.label }}</button>
+        }
+      </div>
+
+      @if (paymentMode() !== 'Credit') {
+        <div class="row nowrap paid-row">
+          <label for="paid">Received</label>
+          <input id="paid" type="number" min="0" [ngModel]="paid() ?? netAmount()" (ngModelChange)="paid.set($event === null || $event === '' ? null : +$event)">
+          <button mat-button (click)="paid.set(null)">Full</button>
+        </div>
+      }
+      @if (balanceDue() > 0) { <div class="due">On credit: <b class="money">{{ balanceDue() | money }}</b></div> }
+      @if (paidAmount() > netAmount()) { <div class="small muted">Extra {{ (paidAmount() - netAmount()) | money }} clears older dues.</div> }
+
+      <mat-form-field class="full notes">
+        <mat-label>Note (optional)</mat-label>
+        <input matInput [ngModel]="notes()" (ngModelChange)="notes.set($event)">
+      </mat-form-field>
+
+      <div class="row nowrap">
+        <button mat-button (click)="clearCart()" [disabled]="!cart().length">Clear</button>
+        <button mat-flat-button class="complete" [disabled]="!canComplete()" (click)="complete()">
+          @if (saving()) { <mat-spinner diameter="18" /> } @else {
+            {{ conn.online() ? 'Complete sale' : 'Save sale offline' }} · {{ netAmount() | money }}
+          }
+        </button>
+      </div>
+      @if (!customer() && cart().length) { <div class="small neg">Choose a customer to finish.</div> }
+    </div>
+  </aside>
+</div>

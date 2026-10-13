@@ -1,0 +1,164 @@
+@use '@angular/material' as mat;
+@use './theme-colors' as brand;
+
+// Self-hosted fonts and icons so the app looks right with no internet.
+@use '@fontsource-variable/manrope';
+@use '@fontsource/ibm-plex-mono/400.css' as plex400;
+@use '@fontsource/ibm-plex-mono/500.css' as plex500;
+@use 'material-symbols/outlined.css' as symbols;
+
+html {
+  @include mat.theme((
+    color: (
+      primary: brand.$primary-palette,
+      tertiary: brand.$tertiary-palette,
+      theme-type: light,
+    ),
+    typography: (plain-family: 'Manrope Variable', brand-family: 'Manrope Variable'),
+    density: -1,
+  ));
+
+  // App tokens. Blue = brand / navigation. Red is kept for things that need attention:
+  // crates owed, money due, expiry — so it always means "act on this".
+  --app-bg: #f4f6f9;
+  --app-surface: #ffffff;
+  --app-border: #e3e7ee;
+  --app-ink: #17202c;
+  --app-muted: #5f6b7a;
+  --app-nav: #0a2f5c;
+  --app-nav-ink: #c9d8ee;
+  --app-blue: #0b4a8f;
+  --app-red: #c8102e;
+  --app-red-soft: #fdecee;
+  --app-green: #18794e;
+  --app-green-soft: #e7f6ee;
+  --app-amber: #a15c07;
+  --app-amber-soft: #fff4e0;
+  --app-radius: 10px;
+  --app-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+html.dark {
+  @include mat.theme((
+    color: (primary: brand.$primary-palette, tertiary: brand.$tertiary-palette, theme-type: dark),
+  ));
+  --app-bg: #0f141b;
+  --app-surface: #171e27;
+  --app-border: #263140;
+  --app-ink: #e6ebf2;
+  --app-muted: #97a3b4;
+  --app-nav: #0b1626;
+  --app-red-soft: #3a1219;
+  --app-green-soft: #0f2e20;
+  --app-amber-soft: #33240b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--app-ink);
+  font-family: 'Manrope Variable', system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+mat-icon.material-symbols-outlined { font-family: 'Material Symbols Outlined'; }
+
+// ---------- Layout helpers ----------
+.page { padding: 20px 24px 40px; max-width: 1400px; margin: 0 auto; }
+.page-head {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px;
+  h1 { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  .sub { color: var(--app-muted); margin-top: 4px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+}
+.card {
+  background: var(--app-surface); border: 1px solid var(--app-border); border-radius: var(--app-radius);
+  padding: 16px;
+}
+.card-title { font-weight: 700; font-size: 15px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+.grid { display: grid; gap: 16px; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.muted { color: var(--app-muted); }
+.small { font-size: 12px; }
+.right { text-align: right; }
+.full { width: 100%; }
+.filters { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 12px;
+  mat-form-field { width: 200px; }
+  .grow { flex: 1; min-width: 220px; }
+}
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px;
+  .span-2 { grid-column: span 2; }
+  @media (max-width: 640px) { grid-template-columns: 1fr; .span-2 { grid-column: auto; } }
+}
+
+// ---------- Numbers ----------
+.num, .money { font-family: var(--app-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pos { color: var(--app-green); }
+.neg { color: var(--app-red); }
+
+// ---------- Status chips ----------
+.chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; line-height: 18px; white-space: nowrap;
+  background: #eef1f5; color: var(--app-muted);
+  &.green { background: var(--app-green-soft); color: var(--app-green); }
+  &.red { background: var(--app-red-soft); color: var(--app-red); }
+  &.amber { background: var(--app-amber-soft); color: var(--app-amber); }
+  &.blue { background: #e6eef9; color: var(--app-blue); }
+  .material-symbols-outlined { font-size: 15px; }
+}
+
+// ---------- Tables ----------
+.table-wrap { overflow: auto; border: 1px solid var(--app-border); border-radius: var(--app-radius); background: var(--app-surface); }
+table.data {
+  width: 100%; border-collapse: collapse; font-size: 13px;
+  th { text-align: left; font-weight: 600; color: var(--app-muted); background: var(--app-bg); position: sticky; top: 0; z-index: 1;
+       padding: 9px 12px; border-bottom: 1px solid var(--app-border); white-space: nowrap; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--app-border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr.clickable { cursor: pointer; &:hover { background: color-mix(in srgb, var(--app-blue) 5%, transparent); } }
+  th.right, td.right { text-align: right; }
+  tfoot td { font-weight: 700; background: var(--app-bg); border-top: 1px solid var(--app-border); }
+}
+.empty { padding: 32px; text-align: center; color: var(--app-muted);
+  .material-symbols-outlined { font-size: 36px; display: block; margin: 0 auto 6px; opacity: .6; }
+}
+
+// ---------- Skeleton ----------
+.skeleton { background: linear-gradient(90deg, #e9edf2 25%, #f4f6f9 50%, #e9edf2 75%); background-size: 200% 100%;
+  animation: shimmer 1.2s infinite; border-radius: 6px; height: 14px; }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+// ---------- Stat tiles ----------
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat {
+  background: var(--app-surface); border: 1px solid var(--app-border); border-radius: var(--app-radius); padding: 14px 16px;
+  .label { color: var(--app-muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .value { font-family: var(--app-mono); font-size: 22px; font-weight: 500; margin-top: 6px; }
+  .hint { font-size: 12px; color: var(--app-muted); margin-top: 2px; }
+  &.alert { border-color: color-mix(in srgb, var(--app-red) 40%, var(--app-border)); .value { color: var(--app-red); } }
+}
+
+// ---------- Snackbar variants ----------
+.snack-success { --mdc-snackbar-container-color: #0f5132; --mat-snack-bar-button-color: #c7f0d8; }
+.snack-error { --mdc-snackbar-container-color: #8a1022; --mat-snack-bar-button-color: #ffd5da; }
+
+// ---------- Print ----------
+@media print {
+  body { background: #fff; }
+  .no-print, .mat-drawer, .mat-sidenav { display: none !important; }
+  .mat-drawer-content, .mat-sidenav-content { margin: 0 !important; }
+  .mat-drawer-container { height: auto !important; overflow: visible !important; }
+  .page { padding: 0; max-width: none; }
+}
+
+// Icons placed directly inside Material buttons line up with the label.
+.mdc-button__label { display: inline-flex; align-items: center; gap: 6px; }
+.mdc-button .material-symbols-outlined { font-size: 20px; line-height: 1; }
+.mat-mdc-icon-button .material-symbols-outlined { font-size: 22px; }
